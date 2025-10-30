@@ -1,10 +1,11 @@
 import { PokemonDetailPageProps } from "@/app/interfaces/pokemon";
 import { getPokemonById } from "@/app/utils/get-pokemon-by-id";
 import Image from "next/image";
+import Link from "next/link";
 
-export default async function Detail({ params }: PokemonDetailPageProps) {
-    const parameters = await params;
-    const id = parameters.id;
+export default async function Detail({ parameters }: PokemonDetailPageProps) {
+    const params = await parameters;
+    const id = params.id;
     const pokemonData = await getPokemonById(id);
 
     return (
@@ -13,6 +14,7 @@ export default async function Detail({ params }: PokemonDetailPageProps) {
             <div className="relative" style={{height: "200px"}}>
                 <Image priority src={pokemonData?.sprites.front_default || ''} alt={pokemonData?.name || 'Pokemon image'} fill style={{ objectFit: "contain" }}/>
             </div>
+            <Link href="/">Volver a la home</Link>
         </main>
     )
 }

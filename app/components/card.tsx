@@ -6,7 +6,7 @@ export default function Card({ pokemonIndex, pokemonName }: { pokemonIndex: numb
   
   return (
     <Link href={`/pokemon/${pokemonIndex}`}   className="flex flex-col justify-center items-center p-4 rounded-2xl bg-slate-800" >
-      <img src={imageUrl} alt={pokemonName} width={64} height={64}  />
+      <img src={imageUrl} alt={pokemonName} width={128} height={128}  />
       <p className="capitalize text-center">{pokemonName}</p>
     </Link>
   );
