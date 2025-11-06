@@ -27,5 +27,22 @@ export interface PokemonDetail {
         back_shiny?: string;
         front_default: string;
         front_shiny: string;
+    };
+    cries: { latest: string };
+    types: PokemonType[];
+    species: { name: string; url: string }
+
+}
+
+export interface PokemonType {
+    slot: number;
+    type: {
+        name: string;
+        url: string
     }
+}
+
+export interface PaginationComponentProps {
+    currentPage: number;
+    totalPages: number;
 }
