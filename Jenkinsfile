@@ -1,21 +1,16 @@
 pipeline {
     agent any
 
-    // Trigger automático al hacer push en GitHub
     triggers {
-        githubPush()
+        githubPush() // Trigger automático al hacer push
     }
 
     environment {
-        // Nombre de la herramienta NodeJS registrada en Jenkins
-        NODEJS_HOME = tool name: 'NodeJS', type: 'NodeJS'
-        PATH = "${NODEJS_HOME}/bin:${env.PATH}"
-        // Instancia de SonarQube registrada en Jenkins
-        SONARQUBE = 'SonarQubeLocal'
+        // Nombre de tu servidor SonarQube configurado en Jenkins → Manage Jenkins → Configure System
+        SONARQUBE = 'MySonarQubeServer'
     }
 
     stages {
-
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -38,22 +33,27 @@ pipeline {
         stage('Run Unit Tests') {
             steps {
                 echo "Ejecutando tests unitarios..."
-                bat 'npm test'
+                // Ejecuta tests y genera reporte JUnit
+                bat 'npm test -- --ci --reporters=default --reporters=jest-junit'
+            }
+            post {
+                always {
+                    // Publica resultados de tests en Jenkins
+                    junit 'junit.xml'
+                }
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('SonarQubeLocal') {
-                    echo "Ejecutando análisis SonarQube..."
-                    bat 'sonar-scanner'
+                withSonarQubeEnv('MySonarQubeServer') {
+                    bat 'sonar-scanner -Dsonar.projectKey=pokedex -Dsonar.sources=. -Dsonar.host.url=http://localhost:9000 -Dsonar.login=<YOUR_SONAR_TOKEN>'
                 }
             }
         }
 
-        stage('Quality Gate') {
+        stage('Wait for Quality Gate') {
             steps {
-                // Espera el resultado del Quality Gate de Sonar
                 timeout(time: 5, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
