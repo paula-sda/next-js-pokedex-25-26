@@ -30,11 +30,6 @@ pipeline {
                 echo "Ejecutando tests unitarios..."
                 bat 'npm test'
             }
-            post {
-                always {
-                    junit '**/test-results/*.xml'  // Ajusta según dónde generes los resultados
-                }
-            }
         }
 
         stage('SonarQube Analysis') {
