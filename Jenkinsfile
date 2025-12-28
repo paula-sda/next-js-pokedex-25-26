@@ -31,23 +31,17 @@ pipeline {
         }
 
         stage('Run Unit Tests') {
-            steps {
-                echo "Ejecutando tests unitarios..."
-                // Ejecuta tests y genera reporte JUnit
-                bat 'npm test -- --ci --reporters=default --reporters=jest-junit'
-            }
-            post {
-                always {
-                    // Publica resultados de tests en Jenkins
-                    junit 'junit.xml'
-                }
-            }
-        }
+    steps {
+        echo "Ejecutando tests unitarios..."
+        bat 'npm test'
+    }
+}
+
 
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('MySonarQubeServer') {
-                    bat 'sonar-scanner -Dsonar.projectKey=pokedex -Dsonar.sources=. -Dsonar.host.url=http://localhost:9000 -Dsonar.login=<YOUR_SONAR_TOKEN>'
+                    bat 'sonar-scanner -Dsonar.projectKey=pokedex -Dsonar.sources=. -Dsonar.host.url=http://localhost:9000 -Dsonar.login=<squ_eecea593d9168ac1de3a06dd275b48eb7a6718a4>'
                 }
             }
         }
