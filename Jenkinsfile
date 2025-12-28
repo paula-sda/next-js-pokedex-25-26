@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    triggers {
+        githubPush()
+    }
+
     stages {
         stage('Checkout') {
             steps {
@@ -31,7 +35,6 @@ pipeline {
         stage('Deploy to DESA (simulado)') {
             steps {
                 echo "=== Desplegando a entorno de Desarrollo (simulado) ==="
-                // Aquí puedes simular copiar la build o hacer lo que quieras para DESA
                 bat 'echo Copiando build a carpeta de DESA...'
             }
         }
@@ -45,7 +48,6 @@ pipeline {
         stage('Deploy to PROD (simulado)') {
             steps {
                 echo "=== Desplegando a Producción (simulado) ==="
-                // Simulación de despliegue
                 bat 'echo Copiando build a carpeta de PRODUCCIÓN...'
             }
         }
