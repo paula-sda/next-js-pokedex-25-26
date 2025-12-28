@@ -1,11 +1,21 @@
 pipeline {
     agent any
 
+    // Trigger automático al hacer push en GitHub
     triggers {
         githubPush()
     }
 
+    environment {
+        // Nombre de la herramienta NodeJS registrada en Jenkins
+        NODEJS_HOME = tool name: 'NodeJS', type: 'NodeJS'
+        PATH = "${NODEJS_HOME}/bin:${env.PATH}"
+        // Instancia de SonarQube registrada en Jenkins
+        SONARQUBE = 'SonarQubeLocal'
+    }
+
     stages {
+
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -29,6 +39,24 @@ pipeline {
             steps {
                 echo "Ejecutando tests unitarios..."
                 bat 'npm test'
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('SonarQubeLocal') {
+                    echo "Ejecutando análisis SonarQube..."
+                    bat 'sonar-scanner'
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                // Espera el resultado del Quality Gate de Sonar
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
             }
         }
 
