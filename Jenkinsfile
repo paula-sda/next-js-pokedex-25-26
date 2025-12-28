@@ -1,12 +1,7 @@
 pipeline {
     agent any
 
-    triggers {
-        githubPush() // dispara el pipeline cuando hay un push en GitHub
-    }
-
     stages {
-
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -26,22 +21,30 @@ pipeline {
             }
         }
 
-        stage('Run Tests') {
+        stage('Deploy to DESA') {
             steps {
+                echo "Desplegando a entorno de Desarrollo..."
+                // Borra la carpeta anterior si existe
+                bat 'rmdir /S /Q C:\\JenkinsDeploy\\DEV\\Pokedex || exit 0'
+                // Crea la carpeta y copia la build
+                bat 'xcopy /E /I .\\out C:\\JenkinsDeploy\\DEV\\Pokedex\\'
+            }
+        }
+
+        stage('Run Automated Tests') {
+            steps {
+                echo "Ejecutando tests unitarios..."
                 bat 'npm test'
+                // E2E eliminado de momento
             }
         }
 
-        stage('Deploy to Dev') {
+        stage('Deploy to PROD') {
             steps {
-                bat 'npm run start'
-            }
-        }
-
-        stage('Deploy to Prod') {
-            steps {
-                echo 'Deploying to Production...'
-                // Aquí podrías poner scripts de despliegue reales
+                input message: '¿Deseas desplegar a PRODUCCIÓN?'
+                echo "Desplegando a Producción..."
+                bat 'rmdir /S /Q C:\\JenkinsDeploy\\PROD\\Pokedex || exit 0'
+                bat 'xcopy /E /I .\\out C:\\JenkinsDeploy\\PROD\\Pokedex\\'
             }
         }
     }
