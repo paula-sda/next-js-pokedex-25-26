@@ -18,15 +18,14 @@ pipeline {
         stage('Build') {
             steps {
                 bat 'npm run build'
+                bat 'npm run export' // genera la carpeta 'out'
             }
         }
 
         stage('Deploy to DESA') {
             steps {
                 echo "Desplegando a entorno de Desarrollo..."
-                // Borra la carpeta anterior si existe
                 bat 'rmdir /S /Q C:\\JenkinsDeploy\\DEV\\Pokedex || exit 0'
-                // Crea la carpeta y copia la build
                 bat 'xcopy /E /I .\\out C:\\JenkinsDeploy\\DEV\\Pokedex\\'
             }
         }
@@ -35,7 +34,6 @@ pipeline {
             steps {
                 echo "Ejecutando tests unitarios..."
                 bat 'npm test'
-                // E2E eliminado de momento
             }
         }
 
