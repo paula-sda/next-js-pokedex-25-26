@@ -38,13 +38,14 @@ pipeline {
 }
 
 
-        stage('SonarQube Analysis') {
-            steps {
-                withSonarQubeEnv('MySonarQubeServer') {
-                    bat 'sonar-scanner -Dsonar.projectKey=pokedex -Dsonar.sources=. -Dsonar.host.url=http://localhost:9000 -Dsonar.login=<squ_eecea593d9168ac1de3a06dd275b48eb7a6718a4>'
-                }
-            }
+       stage('SonarQube Analysis') {
+    steps {
+        withSonarQubeEnv('SonarQube Local') {
+            bat 'sonar-scanner -Dsonar.projectKey=pokedex -Dsonar.sources=.'
         }
+    }
+}
+
 
         stage('Wait for Quality Gate') {
             steps {
