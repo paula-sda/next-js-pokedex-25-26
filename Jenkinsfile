@@ -2,12 +2,7 @@ pipeline {
     agent any
 
     triggers {
-        githubPush() // Trigger automático al hacer push
-    }
-
-    environment {
-        // Nombre de tu servidor SonarQube configurado en Jenkins → Manage Jenkins → Configure System
-        SONARQUBE = 'MySonarQubeServer'
+        githubPush()
     }
 
     stages {
@@ -31,21 +26,24 @@ pipeline {
         }
 
         stage('Run Unit Tests') {
-    steps {
-        echo "Ejecutando tests unitarios..."
-        bat 'npm test'
-    }
-}
-
-
-       stage('SonarQube Analysis') {
-    steps {
-        withSonarQubeEnv('SonarQube Local') {
-            bat 'sonar-scanner -Dsonar.projectKey=pokedex -Dsonar.sources=.'
+            steps {
+                echo "Ejecutando tests unitarios..."
+                bat 'npm test'
+            }
+            post {
+                always {
+                    junit '**/test-results/*.xml'  // Ajusta según dónde generes los resultados
+                }
+            }
         }
-    }
-}
 
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('SonarQubeLocal') {  // <-- Nombre exacto de tu configuración
+                    bat 'sonar-scanner -Dsonar.projectKey=pokedex -Dsonar.sources=.'
+                }
+            }
+        }
 
         stage('Wait for Quality Gate') {
             steps {
