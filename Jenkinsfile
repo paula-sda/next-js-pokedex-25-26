@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     triggers {
-        githubPush() 
+        githubPush() // Dispara el pipeline cuando hay push a GitHub
     }
 
     stages {
@@ -51,7 +51,7 @@ pipeline {
             steps {
                 echo "=== Desplegando a Producción ==="
                 sh 'rm -rf /var/www/prod/*'
-                sh 'cp -r .next public package.json /var/www/prod/'
+                sh 'cp -r /var/www/desa/* /var/www/prod/'
                 sh 'ls -l /var/www/prod'
             }
         }
