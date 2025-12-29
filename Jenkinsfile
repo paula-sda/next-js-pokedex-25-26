@@ -33,17 +33,14 @@ pipeline {
         }
 
         stage('SonarQube Analysis') {
-            environment {
-                SONAR_TOKEN = credentials('SONAR_TOKEN')
-            }
             steps {
+                // Jenkins gestionará la autenticación mediante la configuración 'jenkinsSonar'
                 withSonarQubeEnv('jenkinsSonar') {
                     sh """
                     npx sonar-scanner \
                         -Dsonar.projectKey=sonarPipeline \
                         -Dsonar.projectName='sonarPipeline' \
-                        -Dsonar.host.url=http://172.174.241.22:9000 \
-                        -Dsonar.login=$SONAR_TOKEN
+                        -Dsonar.sources=.
                     """
                 }
             }
@@ -52,6 +49,7 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 timeout(time: 5, unit: 'MINUTES') {
+                    // Espera el resultado de Quality Gate desde SonarQube
                     waitForQualityGate abortPipeline: true
                 }
             }
