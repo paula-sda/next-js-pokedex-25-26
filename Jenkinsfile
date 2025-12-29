@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     triggers {
-        githubPush() // Dispara el pipeline cuando hay push a GitHub
+        githubPush() 
     }
 
     stages {
@@ -34,25 +34,25 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
-                // Jenkins gestionará la autenticación mediante la configuración 'jenkinsSonar'
-                withSonarQubeEnv('jenkinsSonar') {
-                    sh """
-                    npx sonar-scanner \
-                       -Dsonar.projectKey=sonarPipeline \
-    -Dsonar.projectName='sonarPipeline' \
-    -Dsonar.projectVersion=1.0.0 \
-    -Dsonar.sources=. \
-    -Dsonar.host.url=${env.SONAR_HOST_URL} \
-    -Dsonar.login=$SONAR_TOKEN
-                    """
+                // Usamos withCredentials para pasar el token de SonarQube
+                withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]) {
+                    withSonarQubeEnv('jenkinsSonar') {
+                        sh """
+                        npx sonar-scanner \
+                            -Dsonar.projectKey=sonarPipeline \
+                            -Dsonar.projectName='sonarPipeline' \
+                            -Dsonar.sources=. \
+                            -Dsonar.login=$SONAR_TOKEN
+                        """
+                    }
                 }
             }
         }
 
         stage('Quality Gate') {
             steps {
+                // Espera el resultado del Quality Gate y aborta si falla
                 timeout(time: 5, unit: 'MINUTES') {
-                    // Espera el resultado de Quality Gate desde SonarQube
                     waitForQualityGate abortPipeline: true
                 }
             }
