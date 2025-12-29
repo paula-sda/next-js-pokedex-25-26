@@ -5,6 +5,10 @@ pipeline {
         githubPush() 
     }
 
+    tools {
+        sonarScanner "sonarqube" // Ajusta al nombre del Scanner en Jenkins Global Tool Configuration
+    }
+
     stages {
         stage('Checkout') {
             steps {
@@ -34,24 +38,22 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
-                // Usamos withCredentials para pasar el token de SonarQube
-                withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]) {
-                    withSonarQubeEnv('jenkinsSonar') {
-                        sh """
-                        npx sonar-scanner \
-                            -Dsonar.projectKey=sonarPipeline \
-                            -Dsonar.projectName='sonarPipeline' \
-                            -Dsonar.sources=. \
-                            -Dsonar.login=$SONAR_TOKEN
-                        """
-                    }
+                withSonarQubeEnv('jenkinsSonar') {
+                    // Esto usa el SonarScanner del plugin de Jenkins
+                    sh """
+                        sonar-scanner \
+                        -Dsonar.projectKey=sonarPipeline \
+                        -Dsonar.projectName='sonarPipeline' \
+                        -Dsonar.sources=. \
+                        -Dsonar.host.url=http://172.174.241.22:9000 \
+                        -Dsonar.login=${SONAR_TOKEN}
+                    """
                 }
             }
         }
 
         stage('Quality Gate') {
             steps {
-                // Espera el resultado del Quality Gate y aborta si falla
                 timeout(time: 5, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
@@ -81,5 +83,9 @@ pipeline {
                 sh 'ls -l /var/www/prod'
             }
         }
+    }
+
+    environment {
+        SONAR_TOKEN = credentials('SONAR_TOKEN') // Token de SonarQube en Jenkins Credentials
     }
 }
