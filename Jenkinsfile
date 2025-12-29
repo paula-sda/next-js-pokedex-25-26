@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     triggers {
-        githubPush()
+        githubPush()  
     }
 
     stages {
@@ -19,23 +19,19 @@ pipeline {
             }
         }
 
-        stage('Build') {
+        stage('Build & Export') {
             steps {
                 sh 'npm run build'
+                sh 'npm run export'  // genera la carpeta 'out'
             }
         }
 
-        stage('Run Unit Tests') {
+        stage('Deploy to DESA') {
             steps {
-                echo "Ejecutando tests unitarios..."
-                sh 'npm test'
-            }
-        }
-
-        stage('Deploy to DESA (simulado)') {
-            steps {
-                echo "=== Desplegando a entorno de Desarrollo (simulado) ==="
-                sh 'echo Copiando build a /home/azureuser/DESA/'
+                echo "=== Desplegando a entorno de Desarrollo ==="
+                sh 'rm -rf /var/www/desa/*'
+                sh 'cp -r out/* /var/www/desa/'
+                sh 'ls -l /var/www/desa'  
             }
         }
 
@@ -45,10 +41,12 @@ pipeline {
             }
         }
 
-        stage('Deploy to PROD (simulado)') {
+        stage('Deploy to PROD') {
             steps {
-                echo "=== Desplegando a Producción (simulado) ==="
-                sh 'echo Copiando build a /home/azureuser/PRODUCCION/'
+                echo "=== Desplegando a Producción ==="
+                sh 'rm -rf /var/www/prod/*'
+                sh 'cp -r out/* /var/www/prod/'
+                sh 'ls -l /var/www/prod'  
             }
         }
     }
