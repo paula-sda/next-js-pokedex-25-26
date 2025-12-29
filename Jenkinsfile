@@ -2,11 +2,11 @@ pipeline {
     agent any
 
     triggers {
-        githubPush() 
+        githubPush() // Dispara el pipeline cuando hay push a GitHub
     }
 
-    tools {
-        sonarScanner "sonarqube" // Ajusta al nombre del Scanner en Jenkins Global Tool Configuration
+    environment {
+        SONAR_TOKEN = credentials('SONAR_TOKEN') // token de SonarQube
     }
 
     stages {
@@ -39,23 +39,33 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('jenkinsSonar') {
-                    // Esto usa el SonarScanner del plugin de Jenkins
-                    sh """
-                        sonar-scanner \
-                        -Dsonar.projectKey=sonarPipeline \
-                        -Dsonar.projectName='sonarPipeline' \
-                        -Dsonar.sources=. \
-                        -Dsonar.host.url=http://172.174.241.22:9000 \
-                        -Dsonar.login=${SONAR_TOKEN}
-                    """
+                    // Ejecuta el análisis y obtiene el taskId
+                    script {
+                        def scannerOutput = sh(script: """
+                            npx sonar-scanner \
+                                -Dsonar.projectKey=sonarPipeline \
+                                -Dsonar.projectName='sonarPipeline' \
+                                -Dsonar.sources=. \
+                                -Dsonar.host.url=http://172.174.241.22:9000 \
+                                -Dsonar.login=$SONAR_TOKEN
+                        """, returnStdout: true).trim()
+                        echo "${scannerOutput}"
+                    }
                 }
             }
         }
 
         stage('Quality Gate') {
             steps {
-                timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
+                script {
+                    // Espera la finalización del análisis y obtiene el estado
+                    timeout(time: 10, unit: 'MINUTES') {
+                        def qg = waitForQualityGate()
+                        if (qg.status != 'OK') {
+                            error "Pipeline abortado: Quality Gate = ${qg.status}"
+                        }
+                        echo "Quality Gate passed: ${qg.status}"
+                    }
                 }
             }
         }
@@ -83,9 +93,5 @@ pipeline {
                 sh 'ls -l /var/www/prod'
             }
         }
-    }
-
-    environment {
-        SONAR_TOKEN = credentials('SONAR_TOKEN') // Token de SonarQube en Jenkins Credentials
     }
 }
