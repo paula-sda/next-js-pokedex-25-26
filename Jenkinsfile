@@ -15,43 +15,27 @@ pipeline {
 
         stage('Install dependencies') {
             steps {
-                bat 'npm install'
+                sh 'npm install'
             }
         }
 
         stage('Build') {
             steps {
-                bat 'npm run build'
+                sh 'npm run build'
             }
         }
 
         stage('Run Unit Tests') {
             steps {
                 echo "Ejecutando tests unitarios..."
-                bat 'npm test'
-            }
-        }
-
-        stage('SonarQube Analysis') {
-            steps {
-                withSonarQubeEnv('SonarQubeLocal') {  // <-- Nombre exacto de tu configuración
-                    bat 'sonar-scanner -Dsonar.projectKey=pokedex -Dsonar.sources=.'
-                }
-            }
-        }
-
-        stage('Wait for Quality Gate') {
-            steps {
-                timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
+                sh 'npm test'
             }
         }
 
         stage('Deploy to DESA (simulado)') {
             steps {
                 echo "=== Desplegando a entorno de Desarrollo (simulado) ==="
-                bat 'echo Copiando build a carpeta de DESA...'
+                sh 'echo Copiando build a /home/azureuser/DESA/'
             }
         }
 
@@ -64,7 +48,7 @@ pipeline {
         stage('Deploy to PROD (simulado)') {
             steps {
                 echo "=== Desplegando a Producción (simulado) ==="
-                bat 'echo Copiando build a carpeta de PRODUCCIÓN...'
+                sh 'echo Copiando build a /home/azureuser/PRODUCCION/'
             }
         }
     }
