@@ -38,9 +38,12 @@ pipeline {
                 withSonarQubeEnv('jenkinsSonar') {
                     sh """
                     npx sonar-scanner \
-                        -Dsonar.projectKey=sonarPipeline \
-                        -Dsonar.projectName='sonarPipeline' \
-                        -Dsonar.sources=.
+                       -Dsonar.projectKey=sonarPipeline \
+    -Dsonar.projectName='sonarPipeline' \
+    -Dsonar.projectVersion=1.0.0 \
+    -Dsonar.sources=. \
+    -Dsonar.host.url=${env.SONAR_HOST_URL} \
+    -Dsonar.login=$SONAR_TOKEN
                     """
                 }
             }
