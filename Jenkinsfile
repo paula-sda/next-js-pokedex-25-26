@@ -39,17 +39,16 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('jenkinsSonar') {
-                    // Ejecuta el análisis y obtiene el taskId
                     script {
-                        def scannerOutput = sh(script: """
+                        // Ejecuta el análisis usando sonar.token
+                        sh """
                             npx sonar-scanner \
                                 -Dsonar.projectKey=sonarPipeline \
                                 -Dsonar.projectName='sonarPipeline' \
                                 -Dsonar.sources=. \
                                 -Dsonar.host.url=http://172.174.241.22:9000 \
-                                -Dsonar.login=$SONAR_TOKEN
-                        """, returnStdout: true).trim()
-                        echo "${scannerOutput}"
+                                -Dsonar.token=$SONAR_TOKEN
+                        """
                     }
                 }
             }
