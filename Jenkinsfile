@@ -32,6 +32,31 @@ pipeline {
             }
         }
 
+        stage('SonarQube Analysis') {
+            environment {
+                SONAR_TOKEN = credentials('SONAR_TOKEN')
+            }
+            steps {
+                withSonarQubeEnv('jenkinsSonar') {
+                    sh """
+                    npx sonar-scanner \
+                        -Dsonar.projectKey=sonarPipeline \
+                        -Dsonar.projectName='sonarPipeline' \
+                        -Dsonar.host.url=http://172.174.241.22:9000 \
+                        -Dsonar.login=$SONAR_TOKEN
+                    """
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
         stage('Deploy to DESA') {
             steps {
                 echo "=== Desplegando a entorno de Desarrollo ==="
