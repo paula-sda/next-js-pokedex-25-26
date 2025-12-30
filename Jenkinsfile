@@ -82,7 +82,7 @@ pipeline {
         }
 
         // =========================
-        // DESA AUTOCREADO (con nombre de release DESA-<BUILD>)
+        // DESA AUTOCREADO (DESA-<BUILD>)
         // =========================
         stage('Deploy DESA') {
             steps {
@@ -152,7 +152,7 @@ echo "DESA accesible: http://172.174.241.22:${DESA_PORT}"
         }
 
         // =========================
-        // PROD AUTOCREADO (con nombre de release PROD-<BUILD>) + PM2
+        // PROD AUTOCREADO (PROD-<BUILD>) + PM2
         // =========================
         stage('Deploy to PROD') {
             steps {
@@ -225,4 +225,3 @@ echo "PRODUCCIÓN accesible: http://172.174.241.22:${PROD_PORT}"
         }
     }
 }
-``
