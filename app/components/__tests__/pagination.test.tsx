@@ -7,7 +7,7 @@ describe('PaginationComponent', () => {
         const pageOneLink = screen.getByRole('link', {name: '1'});
 
         expect(pageOneLink).toBeInTheDocument();
-        expect(pageOneLink).toHaveClass('bg-blue-600');
+        expect(pageOneLink).toHaveClass('bg-cyan-400');
     });
 
     it('debería mostrar puntos suspensivos si hay muchas páginas', () => {
