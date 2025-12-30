@@ -70,7 +70,7 @@ pipeline {
         stage('Deploy DESA') {
             steps {
                 sh '''
-                ssh azureuser@172.174.241.22 << EOF
+                ssh -o StrictHostKeyChecking=no azureuser@172.174.241.22 << EOF
                   set -e
                   cd /opt
 
