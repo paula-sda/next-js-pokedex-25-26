@@ -83,13 +83,10 @@ else
 fi
 
 cd next-js-pokedex-25-26
-
 npm install
-
-echo "Construyendo aplicación"
 npm run build
 
-echo "Arrancando aplicación en DESA (puerto 3000)"
+# Arrancar en DESA en segundo plano
 pkill -f "next start" || true
 nohup npm run start -- -H 0.0.0.0 -p 3000 > desa.log 2>&1 &
 '''
@@ -106,18 +103,15 @@ for i in {1..20}; do
     sleep 3
 done
 
-echo "Verificando que la aplicación responde..."
 curl -f http://172.174.241.22:3000
-echo "Aplicación de DESA accesible correctamente"
-echo "Abre esta URL en tu navegador para ver DESA:"
-echo "http://172.174.241.22:3000"
+echo "DESA accesible: http://172.174.241.22:3000"
 '''
             }
         }
 
         stage('Approval before PROD') {
             steps {
-                input message: 'DESA OK. ¿Deseas pasar a PRODUCCIÓN?'
+                input message: '✅ DESA OK. ¿Deseas pasar a PRODUCCIÓN?'
             }
         }
 
@@ -137,14 +131,15 @@ else
 fi
 
 cd next-js-pokedex-25-26
-
 npm install
-
 npm run build
 
-echo "Arrancando aplicación en PRODUCCIÓN (puerto 4000)"
-pkill -f "next start" || true
-nohup npm run start -- -H 0.0.0.0 -p 4000 > produccion.log 2>&1 &
+# Arrancar con PM2 para que sea persistente
+npm install -g pm2
+pm2 delete pokedex-prod || true
+pm2 start npm --name "pokedex-prod" -- run start -- -H 0.0.0.0 -p 4000
+pm2 save
+pm2 startup
 '''
             }
         }
@@ -159,11 +154,8 @@ for i in {1..20}; do
     sleep 3
 done
 
-echo "Verificando que la aplicación responde en PRODUCCIÓN (smoke test)..."
 curl -f http://172.174.241.22:4000
-echo "Aplicación de PRODUCCIÓN accesible correctamente"
-echo "Abre esta URL en tu navegador para ver PRODUCCIÓN:"
-echo "http://172.174.241.22:4000"
+echo "PRODUCCIÓN accesible: http://172.174.241.22:4000"
 '''
             }
         }
