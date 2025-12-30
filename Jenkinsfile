@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -81,7 +82,7 @@ pipeline {
         }
 
         // =========================
-        // DESA AUTOCREADO (DESA-<BUILD>)
+        // DESA AUTOCREADO (DESA-<BUILD>) con nohup
         // =========================
         stage('Deploy DESA') {
             steps {
@@ -98,7 +99,7 @@ sudo mkdir -p "${DESA_RELEASES}"
 sudo mkdir -p "${DESA_BASE}/logs"
 sudo chown -R $USER:$USER "${DESA_BASE}"
 
-# 2) Release por build (DESA-<BUILD>)
+# 2) Release por build
 rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
 
@@ -151,12 +152,12 @@ echo "DESA accesible: http://172.174.241.22:${DESA_PORT}"
         }
 
         // =========================
-        // PROD AUTOCREADO (PROD-<BUILD>) + PM2
+        // PROD AUTOCREADO (PROD-<BUILD>) + PM2 + timeout
         // =========================
         stage('Deploy to PROD') {
             steps {
                 sh '''
-set -e
+set -euo pipefail
 
 RELEASE_NAME="PROD-${BUILD_NUMBER}"
 BUILD_DIR="${PROD_RELEASES}/${RELEASE_NAME}"
@@ -168,11 +169,11 @@ sudo mkdir -p "${PROD_RELEASES}"
 sudo mkdir -p "${PROD_BASE}/logs"
 sudo chown -R $USER:$USER "${PROD_BASE}"
 
-# 2) Release por build (PROD-<BUILD>)
+# 2) Release por build
 rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
 
-# 3) Clonar repo en la release
+# 3) Clonar repo
 git clone --depth 1 https://github.com/paula-sda/next-js-pokedex-25-26.git "${BUILD_DIR}/next-js-pokedex-25-26"
 
 # 4) Instalar y compilar
@@ -180,10 +181,11 @@ cd "${BUILD_DIR}/next-js-pokedex-25-26"
 npm ci
 npm run build
 
-# 5) Symlink "current" -> última release
+# 5) Symlink "current"
 ln -sfn "${BUILD_DIR}/next-js-pokedex-25-26" "${PROD_CURRENT}"
 
-# 6) Arrancar con PM2 desde symlink "current" (puerto fijo PROD_PORT)
+# 6) Arrancar con PM2 (daemon) en puerto fijo PROD_PORT
+#    Aseguramos entorno igual que en tu VM (usuario jenkins)
 export PM2_HOME="/var/lib/jenkins/.pm2"
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
@@ -196,23 +198,28 @@ pm2 save
 cd "${PROD_RELEASES}"
 ls -1t | tail -n +6 | xargs -r rm -rf || true
 
-# 8) Esperar y testear que responde
+# 8) Healthcheck con TIMEOUT (máx 60s) para verificar y NO colgar el stage
 echo "Esperando a que la app de PRODUCCIÓN responda en el puerto ${PROD_PORT}..."
-for i in {1..20}; do
-  curl -s "http://172.174.241.22:${PROD_PORT}" > /dev/null && OK=1 && break
-  echo "Intento $i: la aplicación aún no responde, esperando 3s..."
+END=$((SECONDS+60))
+OK=0
+while [ $SECONDS -lt $END ]; do
+  if curl -s "http://172.174.241.22:${PROD_PORT}" > /dev/null; then
+    OK=1
+    break
+  fi
+  echo "Aún no responde, reintento en 3s..."
   sleep 3
 done
 
-if [ "${OK:-0}" -ne 1 ]; then
-  echo "❌ La app no responde. Logs de PM2:"
-  pm2 logs pokedex-prod --lines 200 || true
-  echo "Descripción del proceso:"
+if [ "${OK}" -ne 1 ]; then
+  echo "❌ La app PROD no responde tras 60s. Falla el stage para NO colgar el pipeline."
+  echo "Diagnóstico corto de PM2 (no streaming):"
+  pm2 logs pokedex-prod --lines 50 --nostream || true
   pm2 describe pokedex-prod || true
   exit 1
 fi
 
-echo ">> PROD desplegado: ${RELEASE_NAME} -> http://172.174.241.22:${PROD_PORT}"
+echo ">> PROD desplegado OK: ${RELEASE_NAME} -> http://172.174.241.22:${PROD_PORT}"
 '''
             }
         }
@@ -220,15 +227,30 @@ echo ">> PROD desplegado: ${RELEASE_NAME} -> http://172.174.241.22:${PROD_PORT}"
         stage('Test PROD (smoke)') {
             steps {
                 sh '''
-echo "Esperando a que la aplicación de PRODUCCIÓN se inicie..."
-for i in {1..20}; do
-    curl -s "http://172.174.241.22:${PROD_PORT}" > /dev/null && break
-    echo "Intento $i: la aplicación aún no responde, esperando 3s..."
-    sleep 3
+set -euo pipefail
+
+echo "Test de humo en PRODUCCIÓN..."
+# 1) Espera breve (máx 30s) y falla si no responde para NO colgarse
+END=$((SECONDS+30))
+OK=0
+while [ $SECONDS -lt $END ]; do
+  if curl -s "http://172.174.241.22:${PROD_PORT}" > /dev/null; then
+    OK=1
+    break
+  fi
+  echo "Aún no responde, reintento en 3s..."
+  sleep 3
 done
 
-curl -f "http://172.174.241.22:${PROD_PORT}"
-echo "PRODUCCIÓN accesible: http://172.174.241.22:${PROD_PORT}"
+if [ "${OK}" -ne 1 ]; then
+  echo "❌ Test de humo falló: no hay respuesta de PROD."
+  exit 1
+fi
+
+# 2) Smoke real: código 200 en la home
+curl -fsSL "http://172.174.241.22:${PROD_PORT}" > /dev/null
+
+echo "✅ Test de humo OK: http://172.174.241.22:${PROD_PORT} responde."
 '''
             }
         }
