@@ -102,6 +102,13 @@ nohup npm run start -- -H 0.0.0.0 -p 3000 > desa.log 2>&1 &
         stage('Test DESA') {
             steps {
                 sh '''
+echo "Esperando a que la aplicación se inicie..."
+for i in {1..20}; do
+    curl -s http://172.174.241.22:3000 > /dev/null && break
+    echo "Intento $i: la aplicación aún no responde, esperando 3s..."
+    sleep 3
+done
+
 echo "Verificando que la aplicación responde..."
 curl -f http://172.174.241.22:3000
 echo "Aplicación accesible correctamente"
