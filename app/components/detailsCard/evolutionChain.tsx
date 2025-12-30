@@ -5,15 +5,15 @@ export default function EvolutionChain({id, evolutions} : {id:number; evolutions
     return (<>
         {evolutions.length > 1 && (
             <div className="mt-8">
-                <h2 className="text-2xl font-bold mb-4 text-center">Cadena Evolutiva</h2>
+                <h2 className="text-2xl font-bold mb-4 text-center text-purple-400">Cadena Evolutiva</h2>
                 <div className="flex gap-4 justify-center items-center flex-wrap">
                     {evolutions.map((evolution, index) => (
                         <div key={evolution.id} className="flex items-center gap-2">
                             <Link
                                 href={`/pokemon/${evolution.id}`}
                                 className={`flex flex-col items-center p-4 rounded-lg transition-all ${evolution.id === parseInt(id.toString())
-                                        ? 'bg-blue-700 ring-2 ring-blue-400'
-                                        : 'bg-slate-800 hover:bg-slate-700'
+                                        ? 'bg-purple-700 ring-2 ring-purple-400'
+                                        : 'bg-slate-800 hover:bg-purple-700'
                                     }`}
                             >
                                 <Image

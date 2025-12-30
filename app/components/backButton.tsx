@@ -8,7 +8,7 @@ export default function BackButton() {
   return (
     <button
       onClick={() => router.back()}
-      className="cursor-pointer mt-8 m-auto w-fit rounded-xs bg-green-700 hover:bg-green-900 px-4 py-2 text-white transition-all"
+      className="cursor-pointer mt-8 m-auto w-fit rounded-xs bg-cyan-400 hover:bg-cyan-600 px-4 py-2 text-black transition-all"
     >
       Volver atrás
     </button>

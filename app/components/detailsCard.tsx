@@ -18,7 +18,7 @@ export default function DetailsCard({ pokemonData, evolutions }: { pokemonData: 
 
     return (
         <>
-            <h1 className="text-3xl font-bold mb-4 text-center capitalize">{pokemonData.name}</h1>
+            <h1 className="text-3xl font-bold mb-4 text-center capitalize text-purple-400">{pokemonData.name}</h1>
             <DetailImage image={currentImage} name={pokemonData.name} toggleOrientation={toggleOrientation} />
             <DetailAudio audioRef={audioRef} cry={pokemonData.cries.latest} playAudio={playAudio} toggleShiny={toggleShiny} />
             <DetailTypes types={pokemonData.types} />
