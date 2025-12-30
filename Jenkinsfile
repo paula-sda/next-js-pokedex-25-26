@@ -17,7 +17,7 @@ pipeline {
         DESA_CURRENT   = '/opt/desa/current'
 
         // PROD
-        PROD_PORT      = '4000'
+        PROD_PORT      = '5000'
         PROD_BASE      = '/opt/produccion'
         PROD_RELEASES  = '/opt/produccion/releases'
         PROD_CURRENT   = '/opt/produccion/current'
@@ -82,7 +82,7 @@ pipeline {
         }
 
         // =========================
-        // DESA AUTOCREADO (robusto)
+        // DESA AUTOCREADO 
         // =========================
         stage('Deploy DESA') {
             steps {
@@ -110,7 +110,7 @@ npm run build
 # Actualizar symlink a la nueva release
 ln -sfn "${BUILD_DIR}/next-js-pokedex-25-26" "${DESA_CURRENT}"
 
-# Parar proceso antiguo por puerto (más fiable que pkill -f)
+# Parar proceso antiguo por puerto
 PIDS_ON_PORT="$(lsof -ti tcp:${DESA_PORT} || true)"
 if [ -n "$PIDS_ON_PORT" ]; then
   echo "Matando proceso(s) en puerto ${DESA_PORT}: $PIDS_ON_PORT"
@@ -124,7 +124,7 @@ echo "Current -> $(readlink -f "${DESA_CURRENT}")" | tee -a "${DESA_BASE}/logs/d
 export BUILD_ID=dontKillMe
 export NODE_ENV=production
 
-# Arrancar de forma robusta (no se muere al acabar Jenkins)
+# Arrancar  
 nohup npx next start -H 0.0.0.0 -p "${DESA_PORT}" > "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log" 2>&1 < /dev/null &
 
 echo $! > "${DESA_BASE}/desa.pid"
@@ -156,14 +156,14 @@ echo "DESA accesible: http://172.174.241.22:${DESA_PORT}"
 
         stage('Approval before PROD') {
             steps {
-                input message: '✅ DESA OK. ¿Deseas pasar a PRODUCCIÓN?'
+                input message: 'DESA OK. ¿Deseas pasar a PRODUCCIÓN?'
             }
         }
 
         // =========================
-        // PROD AUTOCREADO (robusto)
+        // PROD AUTOCREADO 
         // =========================
-        stage('Deploy PROD') {
+        stage('Deploy PRODUCCION') {
             steps {
                 sh '''
 set -e
@@ -189,7 +189,7 @@ npm run build
 # Actualizar symlink a la nueva release
 ln -sfn "${BUILD_DIR}/next-js-pokedex-25-26" "${PROD_CURRENT}"
 
-# Parar proceso antiguo por puerto (fiable)
+# Parar proceso antiguo por puerto
 PIDS_ON_PORT="$(lsof -ti tcp:${PROD_PORT} || true)"
 if [ -n "$PIDS_ON_PORT" ]; then
   echo "Matando proceso(s) en puerto ${PROD_PORT}: $PIDS_ON_PORT"
@@ -219,7 +219,7 @@ echo ">> PROD desplegado: ${RELEASE_NAME} -> http://172.174.241.22:${PROD_PORT}"
             }
         }
 
-        stage('Test PROD') {
+        stage('Test PRODUCCION') {
             steps {
                 sh '''
 echo "Esperando a que la aplicación de PROD se inicie..."
@@ -237,7 +237,7 @@ echo "PROD accesible: http://172.174.241.22:${PROD_PORT}"
 
         stage('Final Approval') {
             steps {
-                input message: '✅ PROD OK. ¿Deseas finalizar?'
+                input message: 'PROD OK. ¿Deseas finalizar?'
             }
         }
     }
