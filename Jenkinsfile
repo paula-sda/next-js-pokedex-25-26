@@ -71,7 +71,7 @@ pipeline {
             steps {
                 sh '''
 set -e
-cd /opt
+cd /opt/desa
 
 if [ ! -d next-js-pokedex-25-26 ]; then
   echo "Clonando repositorio por primera vez..."
@@ -94,7 +94,7 @@ npm run build
 
 echo "Arrancando aplicación en DESA (puerto 3000)"
 pkill -f "next start" || true
-nohup npm run start > desa.log 2>&1 &
+nohup npm run start -- -H 0.0.0.0 -p 3000 > desa.log 2>&1 &
 '''
             }
         }
