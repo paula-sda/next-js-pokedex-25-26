@@ -1,4 +1,3 @@
-
 pipeline {
     agent any
 
@@ -185,14 +184,33 @@ npm run build
 ln -sfn "${BUILD_DIR}/next-js-pokedex-25-26" "${PROD_CURRENT}"
 
 # 6) Arrancar con PM2 desde symlink "current" (puerto fijo PROD_PORT)
+export PM2_HOME="/var/lib/jenkins/.pm2"
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
 cd "${PROD_CURRENT}"
 pm2 delete pokedex-prod || true
-pm2 start npm --name "pokedex-prod" -- run start -- -H 0.0.0.0 -p "${PROD_PORT}"
+pm2 start npm --name "pokedex-prod" --time --update-env -- run start -- -H 0.0.0.0 -p "${PROD_PORT}"
 pm2 save
 
 # 7) Limpiar releases antiguas (dejar 5)
 cd "${PROD_RELEASES}"
 ls -1t | tail -n +6 | xargs -r rm -rf || true
+
+# 8) Esperar y testear que responde
+echo "Esperando a que la app de PRODUCCIÓN responda en el puerto ${PROD_PORT}..."
+for i in {1..20}; do
+  curl -s "http://172.174.241.22:${PROD_PORT}" > /dev/null && OK=1 && break
+  echo "Intento $i: la aplicación aún no responde, esperando 3s..."
+  sleep 3
+done
+
+if [ "${OK:-0}" -ne 1 ]; then
+  echo "❌ La app no responde. Logs de PM2:"
+  pm2 logs pokedex-prod --lines 200 || true
+  echo "Descripción del proceso:"
+  pm2 describe pokedex-prod || true
+  exit 1
+fi
 
 echo ">> PROD desplegado: ${RELEASE_NAME} -> http://172.174.241.22:${PROD_PORT}"
 '''
@@ -218,7 +236,7 @@ echo "PRODUCCIÓN accesible: http://172.174.241.22:${PROD_PORT}"
 
     post {
         success {
-            echo "DESPLIEGUE COMPLETADO (DESA autocreado + PRODUCCIÓN autocreado con PM2)"
+            echo "DESPLIEGUE COMPLETADO (DESA autocreado + PRODUCCIÓN con PM2)"
         }
         failure {
             echo "El pipeline ha fallado. Revisa los logs."
