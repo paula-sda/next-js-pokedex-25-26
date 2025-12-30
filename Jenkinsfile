@@ -1,12 +1,26 @@
+
 pipeline {
     agent any
 
     triggers {
-        githubPush() 
+        githubPush()
     }
 
     environment {
-        SONAR_TOKEN = credentials('SONAR_TOKEN') 
+        SONAR_TOKEN = credentials('SONAR_TOKEN')
+
+        // ===== [NUEVO] Variables para entorno autocreado =====
+        // DESA
+        DESA_PORT      = '3000'
+        DESA_BASE      = '/opt/desa'
+        DESA_RELEASES  = '/opt/desa/releases'
+        DESA_CURRENT   = '/opt/desa/current'
+
+        // PROD
+        PROD_PORT      = '4000'
+        PROD_BASE      = '/opt/produccion'
+        PROD_RELEASES  = '/opt/produccion/releases'
+        PROD_CURRENT   = '/opt/produccion/current'
     }
 
     stages {
@@ -67,28 +81,44 @@ pipeline {
             }
         }
 
+        // =========================
+        // DESA AUTOCREADO (cambios mínimos)
+        // =========================
         stage('Deploy DESA') {
             steps {
                 sh '''
 set -e
-cd /opt/desa
 
-if [ ! -d next-js-pokedex-25-26 ]; then
-  git clone https://github.com/paula-sda/next-js-pokedex-25-26.git
-else
-  cd next-js-pokedex-25-26
-  git fetch origin
-  git reset --hard origin/main
-  cd ..
-fi
+# 1) Preparar estructura / permisos
+sudo mkdir -p "${DESA_RELEASES}"
+sudo mkdir -p "${DESA_BASE}/logs"
+sudo chown -R $USER:$USER "${DESA_BASE}"
 
-cd next-js-pokedex-25-26
-npm install
+# 2) Crear carpeta de release por build
+BUILD_DIR="${DESA_RELEASES}/${BUILD_NUMBER}"
+rm -rf "${BUILD_DIR}"
+mkdir -p "${BUILD_DIR}"
+
+# 3) Clonar repo en la release
+git clone --depth 1 https://github.com/paula-sda/next-js-pokedex-25-26.git "${BUILD_DIR}/next-js-pokedex-25-26"
+
+# 4) Instalar y compilar en la release
+cd "${BUILD_DIR}/next-js-pokedex-25-26"
+npm ci
 npm run build
 
-# Arrancar en DESA en segundo plano
-pkill -f "next start" || true
-nohup npm run start -- -H 0.0.0.0 -p 3000 > desa.log 2>&1 &
+# 5) Actualizar symlink "current" a la nueva release
+ln -sfn "${BUILD_DIR}/next-js-pokedex-25-26" "${DESA_CURRENT}"
+
+# 6) Parar instancia anterior y arrancar la nueva (puerto constante DESA_PORT)
+pkill -f "next start -H 0.0.0.0 -p ${DESA_PORT}" || true
+sleep 1
+cd "${DESA_CURRENT}"
+nohup npm run start -- -H 0.0.0.0 -p "${DESA_PORT}" > "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log" 2>&1 &
+
+# 7) (Opcional) Mantener sólo las 5 últimas releases para ahorrar disco
+cd "${DESA_RELEASES}"
+ls -1t | tail -n +6 | xargs -r rm -rf || true
 '''
             }
         }
@@ -115,31 +145,46 @@ echo "DESA accesible: http://172.174.241.22:3000"
             }
         }
 
+        // =========================
+        // PROD AUTOCREADO (manteniendo PM2)
+        // =========================
         stage('Deploy to PROD') {
             steps {
                 sh '''
 set -e
-cd /opt/produccion
 
-if [ ! -d next-js-pokedex-25-26 ]; then
-  git clone https://github.com/paula-sda/next-js-pokedex-25-26.git
-else
-  cd next-js-pokedex-25-26
-  git fetch origin
-  git reset --hard origin/main
-  cd ..
-fi
+# 1) Preparar estructura / permisos
+sudo mkdir -p "${PROD_RELEASES}"
+sudo mkdir -p "${PROD_BASE}/logs"
+sudo chown -R $USER:$USER "${PROD_BASE}"
 
-cd next-js-pokedex-25-26
-npm install
+# 2) Crear carpeta de release por build
+BUILD_DIR="${PROD_RELEASES}/${BUILD_NUMBER}"
+rm -rf "${BUILD_DIR}"
+mkdir -p "${BUILD_DIR}"
+
+# 3) Clonar repo en la release
+git clone --depth 1 https://github.com/paula-sda/next-js-pokedex-25-26.git "${BUILD_DIR}/next-js-pokedex-25-26"
+
+# 4) Instalar y compilar en la release
+cd "${BUILD_DIR}/next-js-pokedex-25-26"
+npm ci
 npm run build
 
-# Arrancar con PM2 para que sea persistente
+# 5) Actualizar symlink "current" a la nueva release
+ln -sfn "${BUILD_DIR}/next-js-pokedex-25-26" "${PROD_CURRENT}"
+
+# 6) Arrancar con PM2 desde el symlink "current" (puerto constante PROD_PORT)
 npm install -g pm2
 pm2 delete pokedex-prod || true
-pm2 start npm --name "pokedex-prod" -- run start -- -H 0.0.0.0 -p 4000
+cd "${PROD_CURRENT}"
+pm2 start npm --name "pokedex-prod" -- run start -- -H 0.0.0.0 -p "${PROD_PORT}"
 pm2 save
 pm2 startup
+
+# 7) (Opcional) Mantener sólo las 5 últimas releases para ahorrar disco
+cd "${PROD_RELEASES}"
+ls -1t | tail -n +6 | xargs -r rm -rf || true
 '''
             }
         }
@@ -163,7 +208,7 @@ echo "PRODUCCIÓN accesible: http://172.174.241.22:4000"
 
     post {
         success {
-            echo "DESPLIEGUE COMPLETADO (DESA + PRODUCCIÓN)"
+            echo "DESPLIEGUE COMPLETADO (DESA autocreado + PRODUCCIÓN autocreado con PM2)"
         }
         failure {
             echo "El pipeline ha fallado. Revisa los logs."
