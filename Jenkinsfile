@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -81,7 +82,7 @@ pipeline {
         }
 
         // =========================
-        // DESA AUTOCREADO
+        // DESA AUTOCREADO (robusto)
         // =========================
         stage('Deploy DESA') {
             steps {
@@ -106,14 +107,28 @@ cd "${BUILD_DIR}/next-js-pokedex-25-26"
 npm ci
 npm run build
 
+# Actualizar symlink a la nueva release
 ln -sfn "${BUILD_DIR}/next-js-pokedex-25-26" "${DESA_CURRENT}"
 
-pkill -f "next start -H 0.0.0.0 -p ${DESA_PORT}" || true
-sleep 1
+# Parar proceso antiguo por puerto (más fiable que pkill -f)
+PIDS_ON_PORT="$(lsof -ti tcp:${DESA_PORT} || true)"
+if [ -n "$PIDS_ON_PORT" ]; then
+  echo "Matando proceso(s) en puerto ${DESA_PORT}: $PIDS_ON_PORT"
+  kill -9 $PIDS_ON_PORT || true
+  sleep 1
+fi
+
 cd "${DESA_CURRENT}"
+echo "Current -> $(readlink -f "${DESA_CURRENT}")" | tee -a "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log"
 
 export BUILD_ID=dontKillMe
-setsid npm run start -- -H 0.0.0.0 -p "${DESA_PORT}" > "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log" 2>&1 < /dev/null &
+export NODE_ENV=production
+
+# Arrancar de forma robusta (no se muere al acabar Jenkins)
+nohup npx next start -H 0.0.0.0 -p "${DESA_PORT}" > "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log" 2>&1 < /dev/null &
+
+echo $! > "${DESA_BASE}/desa.pid"
+echo "PID nuevo DESA: $(cat "${DESA_BASE}/desa.pid")" | tee -a "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log"
 
 cd "${DESA_RELEASES}"
 ls -1t | tail -n +6 | xargs -r rm -rf || true
@@ -146,7 +161,7 @@ echo "DESA accesible: http://172.174.241.22:${DESA_PORT}"
         }
 
         // =========================
-        // PROD AUTOCREADO
+        // PROD AUTOCREADO (robusto)
         // =========================
         stage('Deploy PROD') {
             steps {
@@ -171,15 +186,31 @@ cd "${BUILD_DIR}/next-js-pokedex-25-26"
 npm ci
 npm run build
 
+# Actualizar symlink a la nueva release
 ln -sfn "${BUILD_DIR}/next-js-pokedex-25-26" "${PROD_CURRENT}"
 
-pkill -f "next start -H 0.0.0.0 -p ${PROD_PORT}" || true
-sleep 1
+# Parar proceso antiguo por puerto (fiable)
+PIDS_ON_PORT="$(lsof -ti tcp:${PROD_PORT} || true)"
+if [ -n "$PIDS_ON_PORT" ]; then
+  echo "Matando proceso(s) en puerto ${PROD_PORT}: $PIDS_ON_PORT"
+  kill -9 $PIDS_ON_PORT || true
+  sleep 1
+fi
+
+# Entrar al nuevo "current" (apunta a la nueva release)
 cd "${PROD_CURRENT}"
+echo "Current -> $(readlink -f "${PROD_CURRENT}")" | tee -a "${PROD_BASE}/logs/prod-${BUILD_NUMBER}.log"
 
 export BUILD_ID=dontKillMe
-setsid npm run start -- -H 0.0.0.0 -p "${PROD_PORT}" > "${PROD_BASE}/logs/prod-${BUILD_NUMBER}.log" 2>&1 < /dev/null &
+export NODE_ENV=production
 
+# Arrancar en background de forma robusta
+nohup npx next start -H 0.0.0.0 -p "${PROD_PORT}" > "${PROD_BASE}/logs/prod-${BUILD_NUMBER}.log" 2>&1 < /dev/null &
+
+echo $! > "${PROD_BASE}/prod.pid"
+echo "PID nuevo PROD: $(cat "${PROD_BASE}/prod.pid")" | tee -a "${PROD_BASE}/logs/prod-${BUILD_NUMBER}.log"
+
+# Limpiar releases antiguas (deja las 5 últimas)
 cd "${PROD_RELEASES}"
 ls -1t | tail -n +6 | xargs -r rm -rf || true
 
