@@ -2,11 +2,11 @@ pipeline {
     agent any
 
     triggers {
-        githubPush() // Dispara el pipeline cuando hay push a GitHub
+        githubPush() 
     }
 
     environment {
-        SONAR_TOKEN = credentials('SONAR_TOKEN') // token de SonarQube
+        SONAR_TOKEN = credentials('SONAR_TOKEN') 
     }
 
     stages {
@@ -40,7 +40,6 @@ pipeline {
             steps {
                 withSonarQubeEnv('jenkinsSonar') {
                     script {
-                        // Ejecuta el análisis usando sonar.token
                         sh """
                             npx sonar-scanner \
                                 -Dsonar.projectKey=sonarPipeline \
@@ -57,7 +56,6 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 script {
-                    // Espera la finalización del análisis y obtiene el estado
                     timeout(time: 10, unit: 'MINUTES') {
                         def qg = waitForQualityGate()
                         if (qg.status != 'OK') {
@@ -69,7 +67,7 @@ pipeline {
             }
         }
 
-       stage('Deploy DESA') {
+        stage('Deploy DESA') {
             steps {
                 sh '''
                 ssh azureuser@172.174.241.22 << EOF
@@ -109,36 +107,32 @@ pipeline {
                 echo "Verificando que la aplicación responde..."
                 curl -f http://172.174.241.22:3000
                 echo "Aplicación accesible correctamente"
+                echo "Abre esta URL en tu navegador para ver DESA:"
+                echo "http://172.174.241.22:3000"
                 '''
             }
         }
-    }
-
-    post {
-        success {
-            echo "DESPLIEGUE COMPLETADO"
-            echo "Accede a la aplicación en:"
-            echo "http://172.174.241.22:3000"
-        }
-        failure {
-            echo "El pipeline ha fallado. Revisa los logs."
-        }
-    }
-}
 
         stage('Approval before PROD') {
             steps {
-                input message: '¿Deseas desplegar a PRODUCCIÓN?'
+                input message: 'DESA OK. ¿Deseas pasar a PRODUCCIÓN?'
             }
         }
 
         stage('Deploy to PROD') {
             steps {
-                echo "=== Desplegando a Producción ==="
-                sh 'rm -rf /var/www/prod/*'
-                sh 'cp -r /var/www/desa/* /var/www/prod/'
-                sh 'ls -l /var/www/prod'
+                echo "Pasando a PRODUCCIÓN... (de momento solo mensaje)"
             }
+        }
+
+    } 
+
+    post {
+        success {
+            echo "DESPLIEGUE COMPLETADO"
+        }
+        failure {
+            echo "El pipeline ha fallado. Revisa los logs."
         }
     }
 }
