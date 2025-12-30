@@ -16,7 +16,7 @@ pipeline {
         DESA_RELEASES  = '/opt/desa/releases'
         DESA_CURRENT   = '/opt/desa/current'
 
-        // PROD
+        // PROD (temporal como DESA)
         PROD_PORT      = '4000'
         PROD_BASE      = '/opt/produccion'
         PROD_RELEASES  = '/opt/produccion/releases'
@@ -82,7 +82,7 @@ pipeline {
         }
 
         // =========================
-        // DESA AUTOCREADO (DESA-<BUILD>) con nohup
+        // DESA AUTOCREADO (igual que tenías)
         // =========================
         stage('Deploy DESA') {
             steps {
@@ -111,14 +111,17 @@ cd "${BUILD_DIR}/next-js-pokedex-25-26"
 npm ci
 npm run build
 
-# 5) Symlink "current" -> última release
+# 5) Symlink "current"
 ln -sfn "${BUILD_DIR}/next-js-pokedex-25-26" "${DESA_CURRENT}"
 
-# 6) Parar anterior y arrancar nueva (puerto fijo DESA_PORT)
+# 6) Arrancar temporal con nohup (evitar que Jenkins lo mate)
 pkill -f "next start -H 0.0.0.0 -p ${DESA_PORT}" || true
 sleep 1
 cd "${DESA_CURRENT}"
-nohup npm run start -- -H 0.0.0.0 -p "${DESA_PORT}" > "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log" 2>&1 &
+
+# Evita que Jenkins mate el proceso y ejecuta en nueva sesión
+export BUILD_ID=dontKillMe
+setsid npm run start -- -H 0.0.0.0 -p "${DESA_PORT}" > "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log" 2>&1 < /dev/null &
 
 # 7) Limpiar releases antiguas (dejar 5)
 cd "${DESA_RELEASES}"
@@ -152,12 +155,12 @@ echo "DESA accesible: http://172.174.241.22:${DESA_PORT}"
         }
 
         // =========================
-        // PROD AUTOCREADO (PROD-<BUILD>) + PM2 + timeout
+        // PROD AUTOCREADO (TEMPORAL, como DESA)
         // =========================
-        stage('Deploy to PROD') {
+        stage('Deploy to PROD (TEMP)') {
             steps {
                 sh '''
-set -euo pipefail
+set -e
 
 RELEASE_NAME="PROD-${BUILD_NUMBER}"
 BUILD_DIR="${PROD_RELEASES}/${RELEASE_NAME}"
@@ -184,22 +187,21 @@ npm run build
 # 5) Symlink "current"
 ln -sfn "${BUILD_DIR}/next-js-pokedex-25-26" "${PROD_CURRENT}"
 
-# 6) Arrancar con PM2 (daemon) en puerto fijo PROD_PORT
-#    Aseguramos entorno igual que en tu VM (usuario jenkins)
-export PM2_HOME="/var/lib/jenkins/.pm2"
-export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-
+# 6) Arranque temporal en 4000 (sin PM2, como DESA)
+pkill -f "next start -H 0.0.0.0 -p ${PROD_PORT}" || true
+sleep 1
 cd "${PROD_CURRENT}"
-pm2 delete pokedex-prod || true
-pm2 start npm --name "pokedex-prod" --time --update-env -- run start -- -H 0.0.0.0 -p "${PROD_PORT}"
-pm2 save
+
+# Evitar que Jenkins mate el proceso y ejecutarlo en background
+export BUILD_ID=dontKillMe
+setsid npm run start -- -H 0.0.0.0 -p "${PROD_PORT}" > "${PROD_BASE}/logs/prod-${BUILD_NUMBER}.log" 2>&1 < /dev/null &
 
 # 7) Limpiar releases antiguas (dejar 5)
 cd "${PROD_RELEASES}"
 ls -1t | tail -n +6 | xargs -r rm -rf || true
 
-# 8) Healthcheck con TIMEOUT (máx 60s) para verificar y NO colgar el stage
-echo "Esperando a que la app de PRODUCCIÓN responda en el puerto ${PROD_PORT}..."
+# 8) Espera breve a que levante (máx 60s)
+echo "Esperando a que PRODUCCIÓN (temporal) responda en el puerto ${PROD_PORT}..."
 END=$((SECONDS+60))
 OK=0
 while [ $SECONDS -lt $END ]; do
@@ -212,14 +214,11 @@ while [ $SECONDS -lt $END ]; do
 done
 
 if [ "${OK}" -ne 1 ]; then
-  echo "❌ La app PROD no responde tras 60s. Falla el stage para NO colgar el pipeline."
-  echo "Diagnóstico corto de PM2 (no streaming):"
-  pm2 logs pokedex-prod --lines 50 --nostream || true
-  pm2 describe pokedex-prod || true
+  echo "❌ PRODUCCIÓN (temporal) no respondió tras 60s. Falta de arranque."
   exit 1
 fi
 
-echo ">> PROD desplegado OK: ${RELEASE_NAME} -> http://172.174.241.22:${PROD_PORT}"
+echo ">> PROD (temporal) desplegado: ${RELEASE_NAME} -> http://172.174.241.22:${PROD_PORT}"
 '''
             }
         }
@@ -227,30 +226,41 @@ echo ">> PROD desplegado OK: ${RELEASE_NAME} -> http://172.174.241.22:${PROD_POR
         stage('Test PROD (smoke)') {
             steps {
                 sh '''
-set -euo pipefail
+set -e
 
-echo "Test de humo en PRODUCCIÓN..."
-# 1) Espera breve (máx 30s) y falla si no responde para NO colgarse
-END=$((SECONDS+30))
-OK=0
-while [ $SECONDS -lt $END ]; do
-  if curl -s "http://172.174.241.22:${PROD_PORT}" > /dev/null; then
-    OK=1
-    break
-  fi
-  echo "Aún no responde, reintento en 3s..."
-  sleep 3
-done
-
-if [ "${OK}" -ne 1 ]; then
-  echo "❌ Test de humo falló: no hay respuesta de PROD."
-  exit 1
-fi
-
-# 2) Smoke real: código 200 en la home
+echo "Smoke test en PRODUCCIÓN (temporal)..."
 curl -fsSL "http://172.174.241.22:${PROD_PORT}" > /dev/null
+echo "✅ Respuesta OK en http://172.174.241.22:${PROD_PORT}"
+'''
+            }
+        }
 
-echo "✅ Test de humo OK: http://172.174.241.22:${PROD_PORT} responde."
+        stage('Finalizar pipeline o mantener PROD temporal') {
+            steps {
+                script {
+                    timeout(time: 15, unit: 'MINUTES') {
+                        def choice = input(
+                          id: 'finishOrKeep',
+                          message: "PRODUCCIÓN TEMPORAL en :${env.PROD_PORT} lista. ¿Finalizar pipeline y APAGAR producción temporal?",
+                          parameters: [choice(name: 'Acción', choices: 'SI, FINALIZAR Y APAGAR\nNO, CONTINUAR (dejar temporal encendida)', description: 'Elige y pulsa Proceed')]
+                        )
+                        env.PROD_DECISION = choice
+                    }
+                }
+            }
+        }
+
+        stage('Cleanup PROD temporal (si elegiste finalizar)') {
+            when {
+                expression { return env.PROD_DECISION == 'SI, FINALIZAR Y APAGAR' }
+            }
+            steps {
+                sh '''
+set -e
+echo "Apagando PRODUCCIÓN temporal en puerto ${PROD_PORT}..."
+pkill -f "next start -H 0.0.0.0 -p ${PROD_PORT}" || true
+sleep 2
+echo "✅ Producción temporal detenida."
 '''
             }
         }
@@ -258,10 +268,10 @@ echo "✅ Test de humo OK: http://172.174.241.22:${PROD_PORT} responde."
 
     post {
         success {
-            echo "DESPLIEGUE COMPLETADO (DESA autocreado + PRODUCCIÓN con PM2)"
+            echo "✅ PIPELINE COMPLETADO: DESA y PRODUCCIÓN temporal OK. (Si elegiste finalizar, PROD temporal apagada)"
         }
         failure {
-            echo "El pipeline ha fallado. Revisa los logs."
+            echo "❌ El pipeline ha fallado. Revisa los logs de los stages que fallaron."
         }
     }
 }
