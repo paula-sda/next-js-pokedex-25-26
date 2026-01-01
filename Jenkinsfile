@@ -1,4 +1,3 @@
-
 pipeline {
     agent any
 
@@ -125,7 +124,7 @@ export BUILD_ID=dontKillMe
 export NODE_ENV=production
 
 # Arrancar en background
-nohup npx next start -H 0.0.0.0 -p "${DESA_PORT}" > "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log" 2>&1 < /dev/null &
+setsid npx next start -H 0.0.0.0 -p "${DESA_PORT}" > "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log" 2>&1 < /dev/null &
 
 echo $! > "${DESA_BASE}/desa.pid"
 echo "PID nuevo DESA: $(cat "${DESA_BASE}/desa.pid")" | tee -a "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log"
@@ -183,7 +182,7 @@ BUILD_DIR="${PROD_RELEASES}/${RELEASE_NAME}"
 echo ">> Creando release ${RELEASE_NAME} en ${BUILD_DIR}"
 
 sudo mkdir -p "${PROD_RELEASES}"
-sudo mkdir -p "${PROD_BASE}/logs}"
+sudo mkdir -p "${PROD_BASE}/logs"
 sudo chown -R $USER:$USER "${PROD_BASE}"
 
 rm -rf "${BUILD_DIR}"
@@ -214,7 +213,7 @@ export BUILD_ID=dontKillMe
 export NODE_ENV=production
 
 # Arrancar en background y mantener vivo tras fin del pipeline
-nohup npx next start -H 0.0.0.0 -p "${PROD_PORT}" > "${PROD_BASE}/logs/prod-${BUILD_NUMBER}.log" 2>&1 < /dev/null &
+setsid npx next start -H 0.0.0.0 -p "${PROD_PORT}" > "${PROD_BASE}/logs/prod-${BUILD_NUMBER}.log" 2>&1 < /dev/null &
 
 echo $! > "${PROD_BASE}/prod.pid"
 echo "PID nuevo PROD: $(cat "${PROD_BASE}/prod.pid")" | tee -a "${PROD_BASE}/logs/prod-${BUILD_NUMBER}.log"
