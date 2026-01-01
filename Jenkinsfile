@@ -1,4 +1,3 @@
-
 pipeline {
     agent any
 
@@ -161,7 +160,7 @@ echo "DESA accesible: http://172.174.241.22:${DESA_PORT}"
         }
 
         // =========================
-        // PROD AUTOCREADO 
+        // PROD AUTOCREADO CON PM2
         // =========================
         stage('Deploy PRODUCCION') {
             steps {
@@ -189,14 +188,6 @@ npm run build
 # Actualizar symlink a la nueva release
 ln -sfn "${BUILD_DIR}/next-js-pokedex-25-26" "${PROD_CURRENT}"
 
-# Parar proceso antiguo por puerto
-PIDS_ON_PORT="$(lsof -ti tcp:${PROD_PORT} || true)"
-if [ -n "$PIDS_ON_PORT" ]; then
-  echo "Matando proceso(s) en puerto ${PROD_PORT}: $PIDS_ON_PORT"
-  kill -9 $PIDS_ON_PORT || true
-  sleep 1
-fi
-
 # Entrar al nuevo "current" (apunta a la nueva release)
 cd "${PROD_CURRENT}"
 echo "Current -> $(readlink -f "${PROD_CURRENT}")" | tee -a "${PROD_BASE}/logs/prod-${BUILD_NUMBER}.log"
@@ -204,17 +195,15 @@ echo "Current -> $(readlink -f "${PROD_CURRENT}")" | tee -a "${PROD_BASE}/logs/p
 export BUILD_ID=dontKillMe
 export NODE_ENV=production
 
-# Arrancar en background de forma robusta
-nohup npx next start -H 0.0.0.0 -p "${PROD_PORT}" > "${PROD_BASE}/logs/prod-${BUILD_NUMBER}.log" 2>&1 < /dev/null &
-
-echo $! > "${PROD_BASE}/prod.pid"
-echo "PID nuevo PROD: $(cat "${PROD_BASE}/prod.pid")" | tee -a "${PROD_BASE}/logs/prod-${BUILD_NUMBER}.log"
+# Arrancar/reiniciar con PM2
+pm2 start npx --name "pokedex-prod" -- start -H 0.0.0.0 -p "${PROD_PORT}" --update-env || pm2 restart pokedex-prod
+pm2 save
 
 # Limpiar releases antiguas (deja las 5 últimas)
 cd "${PROD_RELEASES}"
 ls -1t | tail -n +6 | xargs -r rm -rf || true
 
-echo ">> PROD desplegado: ${RELEASE_NAME} -> http://172.174.241.22:${PROD_PORT}"
+echo ">> PROD desplegado y activo: http://172.174.241.22:${PROD_PORT}"
 '''
             }
         }
@@ -244,10 +233,14 @@ echo "PROD accesible: http://172.174.241.22:${PROD_PORT}"
 
     post {
         success {
-            echo "✅ PIPELINE COMPLETADO: DESA y PROD OK"
+            mail to: 'paula_saenz@euneiz.com',
+                 subject: "Pipeline completado: DESA y PROD OK - Build #${BUILD_NUMBER}",
+                 body: "El pipeline de la Pokedex se ha completado correctamente.\nRevisa PROD en http://172.174.241.22:${PROD_PORT}\n\nSaludos,\nJenkins"
         }
         failure {
-            echo "❌ El pipeline ha fallado. Revisa los logs de los stages que fallaron."
+            mail to: 'paula_saenz@euneiz.com',
+                 subject: "Pipeline FALLADO - Build #${BUILD_NUMBER}",
+                 body: "El pipeline de la Pokedex ha fallado.\n\nRevisa los logs de Jenkins para más detalles.\n\nSaludos,\nJenkins"
         }
     }
 }
