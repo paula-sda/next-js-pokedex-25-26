@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     triggers {
-        githubPush()
+        githubPush() // Conecta Jenkins con GitHub para ejecutar el pipeline al hacer push
     }
 
     environment {
@@ -141,13 +141,21 @@ echo ">> DESA desplegado: ${RELEASE_NAME} -> http://172.174.241.22:${DESA_PORT}"
             steps {
                 sh '''
 echo "Esperando a que la aplicación de DESA se inicie..."
-for i in {1..20}; do
-    curl -s "http://172.174.241.22:${DESA_PORT}" > /dev/null && break
-    echo "Intento $i: la aplicación aún no responde, esperando 3s..."
-    sleep 3
+for i in $(seq 1 20); do
+    if curl -s "http://172.174.241.22:${DESA_PORT}" > /dev/null; then
+        echo "La aplicación DESA está activa en el intento $i"
+        break
+    else
+        echo "Intento $i: la aplicación aún no responde, esperando 3s..."
+        sleep 3
+    fi
 done
 
-curl -f "http://172.174.241.22:${DESA_PORT}"
+if ! curl -f "http://172.174.241.22:${DESA_PORT}"; then
+    echo "ERROR: La aplicación DESA no respondió después de 20 intentos"
+    exit 1
+fi
+
 echo "DESA accesible: http://172.174.241.22:${DESA_PORT}"
 '''
             }
@@ -212,13 +220,21 @@ echo ">> PROD desplegado y activo: http://172.174.241.22:${PROD_PORT}"
             steps {
                 sh '''
 echo "Esperando a que la aplicación de PROD se inicie..."
-for i in {1..20}; do
-    curl -s "http://172.174.241.22:${PROD_PORT}" > /dev/null && break
-    echo "Intento $i: la aplicación aún no responde, esperando 3s..."
-    sleep 3
+for i in $(seq 1 20); do
+    if curl -s "http://172.174.241.22:${PROD_PORT}" > /dev/null; then
+        echo "La aplicación PROD está activa en el intento $i"
+        break
+    else
+        echo "Intento $i: la aplicación aún no responde, esperando 3s..."
+        sleep 3
+    fi
 done
 
-curl -f "http://172.174.241.22:${PROD_PORT}"
+if ! curl -f "http://172.174.241.22:${PROD_PORT}"; then
+    echo "ERROR: La aplicación PROD no respondió después de 20 intentos"
+    exit 1
+fi
+
 echo "PROD accesible: http://172.174.241.22:${PROD_PORT}"
 '''
             }
