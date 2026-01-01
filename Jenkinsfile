@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     triggers {
-        githubPush() // Ejecuta el pipeline al hacer push a GitHub
+        githubPush()
     }
 
     environment {
@@ -44,7 +44,6 @@ pipeline {
 
         stage('Run Unit Tests') {
             steps {
-                echo "Ejecutando tests unitarios..."
                 sh 'npm test'
             }
         }
@@ -52,16 +51,14 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('jenkinsSonar') {
-                    script {
-                        sh """
-                            npx sonar-scanner \
-                                -Dsonar.projectKey=sonarPipeline \
-                                -Dsonar.projectName='sonarPipeline' \
-                                -Dsonar.sources=. \
-                                -Dsonar.host.url=http://172.174.241.22:9000 \
-                                -Dsonar.token=$SONAR_TOKEN
-                        """
-                    }
+                    sh """
+                        npx sonar-scanner \
+                            -Dsonar.projectKey=sonarPipeline \
+                            -Dsonar.projectName='sonarPipeline' \
+                            -Dsonar.sources=. \
+                            -Dsonar.host.url=http://172.174.241.22:9000 \
+                            -Dsonar.token=$SONAR_TOKEN
+                    """
                 }
             }
         }
@@ -81,21 +78,17 @@ pipeline {
         }
 
         // =========================
-        // DESA AUTOCREADO 
+        // DESA AUTOCREADO
         // =========================
         stage('Deploy DESA') {
             steps {
                 sh '''
 set -e
-
 RELEASE_NAME="DESA-${BUILD_NUMBER}"
 BUILD_DIR="${DESA_RELEASES}/${RELEASE_NAME}"
 
-echo ">> Creando release ${RELEASE_NAME} en ${BUILD_DIR}"
-
-sudo mkdir -p "${DESA_RELEASES}"
-sudo mkdir -p "${DESA_BASE}/logs"
-sudo chown -R $USER:$USER "${DESA_BASE}"
+mkdir -p "${DESA_RELEASES}" "${DESA_BASE}/logs"
+chown -R $USER:$USER "${DESA_BASE}"
 
 rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
@@ -106,34 +99,23 @@ cd "${BUILD_DIR}/next-js-pokedex-25-26"
 npm ci
 npm run build
 
-# Actualizar symlink a la nueva release
 ln -sfn "${BUILD_DIR}/next-js-pokedex-25-26" "${DESA_CURRENT}"
 
-# Parar proceso antiguo por puerto
 PIDS_ON_PORT="$(lsof -ti tcp:${DESA_PORT} || true)"
 if [ -n "$PIDS_ON_PORT" ]; then
-  echo "Matando proceso(s) en puerto ${DESA_PORT}: $PIDS_ON_PORT"
   kill -9 $PIDS_ON_PORT || true
-  sleep 1
 fi
 
 cd "${DESA_CURRENT}"
-echo "Current -> $(readlink -f "${DESA_CURRENT}")" | tee -a "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log"
-
 export BUILD_ID=dontKillMe
 export NODE_ENV=production
 
-# Arrancar en background
-setsid npx next start -H 0.0.0.0 -p "${DESA_PORT}" > "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log" 2>&1 < /dev/null &
-
+nohup npx next start -H 0.0.0.0 -p "${DESA_PORT}" > "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log" 2>&1 < /dev/null &
 echo $! > "${DESA_BASE}/desa.pid"
-echo "PID nuevo DESA: $(cat "${DESA_BASE}/desa.pid")" | tee -a "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log"
 
-# Limpiar releases antiguas (deja las 5 últimas)
+# Limpiar releases antiguas (deja 5 últimas)
 cd "${DESA_RELEASES}"
 ls -1t | tail -n +6 | xargs -r rm -rf || true
-
-echo ">> DESA desplegado: ${RELEASE_NAME} -> http://172.174.241.22:${DESA_PORT}"
 '''
             }
         }
@@ -141,23 +123,11 @@ echo ">> DESA desplegado: ${RELEASE_NAME} -> http://172.174.241.22:${DESA_PORT}"
         stage('Test DESA') {
             steps {
                 sh '''
-echo "Esperando a que la aplicación de DESA se inicie..."
-for i in $(seq 1 20); do
-    if curl -s "http://172.174.241.22:${DESA_PORT}" > /dev/null; then
-        echo "La aplicación DESA está activa en el intento $i"
-        break
-    else
-        echo "Intento $i: la aplicación aún no responde, esperando 3s..."
-        sleep 3
-    fi
+for i in {1..20}; do
+    curl -s "http://172.174.241.22:${DESA_PORT}" && break
+    sleep 3
 done
-
-if ! curl -f "http://172.174.241.22:${DESA_PORT}"; then
-    echo "ERROR: La aplicación DESA no respondió después de 20 intentos"
-    exit 1
-fi
-
-echo "DESA accesible: http://172.174.241.22:${DESA_PORT}"
+curl -f "http://172.174.241.22:${DESA_PORT}"
 '''
             }
         }
@@ -169,21 +139,17 @@ echo "DESA accesible: http://172.174.241.22:${DESA_PORT}"
         }
 
         // =========================
-        // PROD AUTOCREADO SIN PM2 (mantiene puerto 5000 abierto)
+        // PROD AUTOCREADO con systemd
         // =========================
         stage('Deploy PRODUCCION') {
             steps {
                 sh '''
 set -e
-
 RELEASE_NAME="PROD-${BUILD_NUMBER}"
 BUILD_DIR="${PROD_RELEASES}/${RELEASE_NAME}"
 
-echo ">> Creando release ${RELEASE_NAME} en ${BUILD_DIR}"
-
-sudo mkdir -p "${PROD_RELEASES}"
-sudo mkdir -p "${PROD_BASE}/logs"
-sudo chown -R $USER:$USER "${PROD_BASE}"
+mkdir -p "${PROD_RELEASES}" "${PROD_BASE}/logs"
+chown -R $USER:$USER "${PROD_BASE}"
 
 rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
@@ -194,35 +160,15 @@ cd "${BUILD_DIR}/next-js-pokedex-25-26"
 npm ci
 npm run build
 
-# Actualizar symlink a la nueva release
+# Actualizar symlink current -> nueva release
 ln -sfn "${BUILD_DIR}/next-js-pokedex-25-26" "${PROD_CURRENT}"
 
-# Parar proceso antiguo por puerto 5000
-PIDS_ON_PORT="$(lsof -ti tcp:${PROD_PORT} || true)"
-if [ -n "$PIDS_ON_PORT" ]; then
-  echo "Matando proceso(s) en puerto ${PROD_PORT}: $PIDS_ON_PORT"
-  kill -9 $PIDS_ON_PORT || true
-  sleep 1
-fi
-
-# Entrar al nuevo "current" (apunta a la nueva release)
-cd "${PROD_CURRENT}"
-echo "Current -> $(readlink -f "${PROD_CURRENT}")" | tee -a "${PROD_BASE}/logs/prod-${BUILD_NUMBER}.log"
-
-export BUILD_ID=dontKillMe
-export NODE_ENV=production
-
-# Arrancar en background y mantener vivo tras fin del pipeline
-setsid npx next start -H 0.0.0.0 -p "${PROD_PORT}" > "${PROD_BASE}/logs/prod-${BUILD_NUMBER}.log" 2>&1 < /dev/null &
-
-echo $! > "${PROD_BASE}/prod.pid"
-echo "PID nuevo PROD: $(cat "${PROD_BASE}/prod.pid")" | tee -a "${PROD_BASE}/logs/prod-${BUILD_NUMBER}.log"
-
-# Limpiar releases antiguas (deja las 5 últimas)
+# Limpiar releases antiguas (deja 5 últimas)
 cd "${PROD_RELEASES}"
 ls -1t | tail -n +6 | xargs -r rm -rf || true
 
-echo ">> PROD desplegado: ${RELEASE_NAME} -> http://172.174.241.22:${PROD_PORT}"
+# Reiniciar el service para que tome la nueva release
+sudo systemctl restart pokedex
 '''
             }
         }
@@ -230,23 +176,11 @@ echo ">> PROD desplegado: ${RELEASE_NAME} -> http://172.174.241.22:${PROD_PORT}"
         stage('Test PRODUCCION') {
             steps {
                 sh '''
-echo "Esperando a que la aplicación de PROD se inicie..."
-for i in $(seq 1 20); do
-    if curl -s "http://172.174.241.22:${PROD_PORT}" > /dev/null; then
-        echo "La aplicación PROD está activa en el intento $i"
-        break
-    else
-        echo "Intento $i: la aplicación aún no responde, esperando 3s..."
-        sleep 3
-    fi
+for i in {1..20}; do
+    curl -s "http://172.174.241.22:${PROD_PORT}" && break
+    sleep 3
 done
-
-if ! curl -f "http://172.174.241.22:${PROD_PORT}"; then
-    echo "ERROR: La aplicación PROD no respondió después de 20 intentos"
-    exit 1
-fi
-
-echo "PROD accesible: http://172.174.241.22:${PROD_PORT}"
+curl -f "http://172.174.241.22:${PROD_PORT}"
 '''
             }
         }
@@ -260,14 +194,10 @@ echo "PROD accesible: http://172.174.241.22:${PROD_PORT}"
 
     post {
         success {
-            mail to: 'paula_saenz@euneiz.com',
-                 subject: "Pipeline completado: DESA y PROD OK - Build #${BUILD_NUMBER}",
-                 body: "El pipeline de la Pokedex se ha completado correctamente.\nRevisa PROD en http://172.174.241.22:${PROD_PORT}\n\nSaludos,\nJenkins"
+            echo "✅ PIPELINE COMPLETADO: DESA y PROD OK"
         }
         failure {
-            mail to: 'paula_saenz@euneiz.com',
-                 subject: "Pipeline FALLADO - Build #${BUILD_NUMBER}",
-                 body: "El pipeline de la Pokedex ha fallado.\n\nRevisa los logs de Jenkins para más detalles.\n\nSaludos,\nJenkins"
+            echo "❌ PIPELINE FALLADO. Revisa los logs."
         }
     }
 }
