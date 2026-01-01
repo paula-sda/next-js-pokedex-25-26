@@ -1,8 +1,9 @@
+
 pipeline {
     agent any
 
     triggers {
-        githubPush() // Conecta Jenkins con GitHub para ejecutar el pipeline al hacer push
+        githubPush() // Ejecuta el pipeline al hacer push a GitHub
     }
 
     environment {
@@ -123,12 +124,13 @@ echo "Current -> $(readlink -f "${DESA_CURRENT}")" | tee -a "${DESA_BASE}/logs/d
 export BUILD_ID=dontKillMe
 export NODE_ENV=production
 
-# Arrancar  
+# Arrancar en background
 nohup npx next start -H 0.0.0.0 -p "${DESA_PORT}" > "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log" 2>&1 < /dev/null &
 
 echo $! > "${DESA_BASE}/desa.pid"
 echo "PID nuevo DESA: $(cat "${DESA_BASE}/desa.pid")" | tee -a "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log"
 
+# Limpiar releases antiguas (deja las 5 últimas)
 cd "${DESA_RELEASES}"
 ls -1t | tail -n +6 | xargs -r rm -rf || true
 
@@ -168,7 +170,7 @@ echo "DESA accesible: http://172.174.241.22:${DESA_PORT}"
         }
 
         // =========================
-        // PROD AUTOCREADO CON PM2
+        // PROD AUTOCREADO SIN PM2 (mantiene puerto 5000 abierto)
         // =========================
         stage('Deploy PRODUCCION') {
             steps {
@@ -181,7 +183,7 @@ BUILD_DIR="${PROD_RELEASES}/${RELEASE_NAME}"
 echo ">> Creando release ${RELEASE_NAME} en ${BUILD_DIR}"
 
 sudo mkdir -p "${PROD_RELEASES}"
-sudo mkdir -p "${PROD_BASE}/logs"
+sudo mkdir -p "${PROD_BASE}/logs}"
 sudo chown -R $USER:$USER "${PROD_BASE}"
 
 rm -rf "${BUILD_DIR}"
@@ -196,6 +198,14 @@ npm run build
 # Actualizar symlink a la nueva release
 ln -sfn "${BUILD_DIR}/next-js-pokedex-25-26" "${PROD_CURRENT}"
 
+# Parar proceso antiguo por puerto 5000
+PIDS_ON_PORT="$(lsof -ti tcp:${PROD_PORT} || true)"
+if [ -n "$PIDS_ON_PORT" ]; then
+  echo "Matando proceso(s) en puerto ${PROD_PORT}: $PIDS_ON_PORT"
+  kill -9 $PIDS_ON_PORT || true
+  sleep 1
+fi
+
 # Entrar al nuevo "current" (apunta a la nueva release)
 cd "${PROD_CURRENT}"
 echo "Current -> $(readlink -f "${PROD_CURRENT}")" | tee -a "${PROD_BASE}/logs/prod-${BUILD_NUMBER}.log"
@@ -203,15 +213,17 @@ echo "Current -> $(readlink -f "${PROD_CURRENT}")" | tee -a "${PROD_BASE}/logs/p
 export BUILD_ID=dontKillMe
 export NODE_ENV=production
 
-# Arrancar/reiniciar con PM2
-pm2 start npx --name "pokedex-prod" -- start -H 0.0.0.0 -p "${PROD_PORT}" --update-env || pm2 restart pokedex-prod
-pm2 save
+# Arrancar en background y mantener vivo tras fin del pipeline
+nohup npx next start -H 0.0.0.0 -p "${PROD_PORT}" > "${PROD_BASE}/logs/prod-${BUILD_NUMBER}.log" 2>&1 < /dev/null &
+
+echo $! > "${PROD_BASE}/prod.pid"
+echo "PID nuevo PROD: $(cat "${PROD_BASE}/prod.pid")" | tee -a "${PROD_BASE}/logs/prod-${BUILD_NUMBER}.log"
 
 # Limpiar releases antiguas (deja las 5 últimas)
 cd "${PROD_RELEASES}"
 ls -1t | tail -n +6 | xargs -r rm -rf || true
 
-echo ">> PROD desplegado y activo: http://172.174.241.22:${PROD_PORT}"
+echo ">> PROD desplegado: ${RELEASE_NAME} -> http://172.174.241.22:${PROD_PORT}"
 '''
             }
         }
