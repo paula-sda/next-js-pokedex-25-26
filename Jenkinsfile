@@ -1,4 +1,3 @@
-
 pipeline {
     agent any
 
@@ -217,6 +216,7 @@ echo "PROD accesible: http://172.174.241.22:${PROD_PORT}"
 '''
             }
         }
+    } 
 
     post {
         success {
