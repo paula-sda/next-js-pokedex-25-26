@@ -161,7 +161,7 @@ echo "DESA accesible: http://172.174.241.22:${DESA_PORT}"
         }
 
         // =========================
-        // PROD ADAPTADO A SYSTEMD (PUERTO 4200)
+        // PROD CON SYSTEMD
         // =========================
         stage('Deploy PRODUCCION') {
             steps {
@@ -218,16 +218,9 @@ echo "PROD accesible: http://172.174.241.22:${PROD_PORT}"
             }
         }
 
-        stage('Final Approval') {
-            steps {
-                input message: 'PROD OK. ¿Deseas finalizar?'
-            }
-        }
-    }
-
     post {
         success {
-            echo "✅ PIPELINE COMPLETADO: DESA OK (3200) y PROD OK (4200, permanente con systemd)"
+            echo "✅ PIPELINE COMPLETADO"
         }
         failure {
             echo "❌ El pipeline ha fallado. Revisa los logs de los stages que fallaron."
