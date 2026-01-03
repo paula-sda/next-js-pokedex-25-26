@@ -106,7 +106,6 @@ cd "${BUILD_DIR}/next-js-pokedex-25-26"
 npm ci
 npm run build
 
-# Actualizar symlink a la nueva release
 ln -sfn "${BUILD_DIR}/next-js-pokedex-25-26" "${DESA_CURRENT}"
 
 # Parar proceso antiguo por puerto
@@ -123,7 +122,6 @@ echo "Current -> $(readlink -f "${DESA_CURRENT}")" | tee -a "${DESA_BASE}/logs/d
 export BUILD_ID=dontKillMe
 export NODE_ENV=production
 
-# Arrancar  
 nohup npx next start -H 0.0.0.0 -p "${DESA_PORT}" > "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log" 2>&1 < /dev/null &
 
 echo $! > "${DESA_BASE}/desa.pid"
@@ -141,8 +139,13 @@ echo ">> DESA desplegado: ${RELEASE_NAME} -> http://172.174.241.22:${DESA_PORT}"
             steps {
                 sh '''
 echo "Esperando a que la aplicación de DESA se inicie..."
-for i in {1..20}; do
-    curl -s "http://172.174.241.22:${DESA_PORT}" > /dev/null && break
+i=0
+while [ $i -lt 20 ]; do
+    if curl -s "http://172.174.241.22:${DESA_PORT}" > /dev/null; then
+        echo "DESA responde en intento $((i+1))"
+        break
+    fi
+    i=$((i+1))
     echo "Intento $i: la aplicación aún no responde, esperando 3s..."
     sleep 3
 done
@@ -162,9 +165,9 @@ echo "DESA accesible: http://172.174.241.22:${DESA_PORT}"
         // =========================
         // PROD AUTOCREADO 
         // =========================
-     stage('Deploy PRODUCCION') {
-    steps {
-        sh '''
+        stage('Deploy PRODUCCION') {
+            steps {
+                sh '''
 set -e
 
 RELEASE_NAME="PROD-${BUILD_NUMBER}"
@@ -172,51 +175,49 @@ BUILD_DIR="${PROD_RELEASES}/${RELEASE_NAME}"
 
 echo ">> Creando release ${RELEASE_NAME} en ${BUILD_DIR}"
 
-# Crear carpeta del release
 rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
 
-# Clonar repo y hacer build
 git clone --depth 1 https://github.com/paula-sda/next-js-pokedex-25-26.git "${BUILD_DIR}/next-js-pokedex-25-26"
 cd "${BUILD_DIR}/next-js-pokedex-25-26"
 npm ci
 npm run build
 
-# Actualizar symlink 'current'
 ln -sfn "${BUILD_DIR}/next-js-pokedex-25-26" "${PROD_CURRENT}"
 cd "${PROD_CURRENT}"
 
-# Configurar entorno
 export NODE_ENV=production
 
-# Arrancar o recargar con pm2
+# Asegurar que pm2 esté en PATH
+export PATH="$HOME/.npm-global/bin:$HOME/.nvm/versions/node/$(node -v)/bin:/usr/bin:/usr/local/bin:$PATH"
+
 if pm2 list | grep -q "nextjs-prod"; then
     echo "Recargando app existente con pm2..."
     pm2 reload nextjs-prod --update-env
 else
     echo "Arrancando app por primera vez con pm2..."
-    pm2 start node_modules/next/dist/bin/next --name nextjs-prod -- start -p "${PROD_PORT}" --update-env
+    pm2 start node_modules/next/dist/bin/next --name nextjs-prod -- start -H 0.0.0.0 -p "${PROD_PORT}" --update-env
 fi
 
-# Guardar la configuración para que sobreviva reinicios
 pm2 save
 
-# Limpiar releases antiguas (mantener solo últimas 5)
 cd "${PROD_RELEASES}"
 ls -1t | tail -n +6 | xargs -r rm -rf || true
 
 echo ">> PROD desplegado: ${RELEASE_NAME} -> http://172.174.241.22:${PROD_PORT}"
 '''
-    }
-}
-
+            }
+        }
 
         stage('Test PRODUCCION') {
             steps {
                 sh '''
 echo "Esperando a que la aplicación de PROD se inicie..."
-for i in {1..20}; do
-    curl -s "http://172.174.241.22:${PROD_PORT}" > /dev/null && break
+for i in $(seq 1 30); do
+    if curl -s "http://172.174.241.22:${PROD_PORT}" > /dev/null; then
+        echo "PROD responde en intento $i"
+        break
+    fi
     echo "Intento $i: la aplicación aún no responde, esperando 3s..."
     sleep 3
 done
