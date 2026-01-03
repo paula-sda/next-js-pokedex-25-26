@@ -80,7 +80,7 @@ pipeline {
         }
 
         // =========================
-        // DESA: puerto 3000 (sin PM2, NO persiste)
+        // DESA: puerto 3000 (sin PM2; NO persiste)
         // =========================
         stage('Deploy DESA') {
             steps {
@@ -96,19 +96,22 @@ echo ">> Creando release ${RELEASE_NAME} en ${BUILD_DIR}"
 sudo mkdir -p "${DESA_RELEASES}" "${DESA_BASE}/logs"
 sudo chown -R azureuser:azureuser "${DESA_BASE}"
 
-# Clonar y build como azureuser
+# Clonar + build + symlink como azureuser
 sudo -H -u azureuser bash -lc '
   set -e
   rm -rf "'${BUILD_DIR}'"
   mkdir -p "'${BUILD_DIR}'"
   git clone --depth 1 https://github.com/paula-sda/next-js-pokedex-25-26.git "'${BUILD_DIR}'/next-js-pokedex-25-26"
   cd "'${BUILD_DIR}'/next-js-pokedex-25-26"
+  COMMIT=$(git rev-parse --short HEAD)
+  echo "Commit DESA: ${COMMIT}" | tee -a "'${DESA_BASE}'/logs/desa-'${BUILD_NUMBER}'.log"
   npm ci
   npm run build
   ln -sfn "'${BUILD_DIR}'/next-js-pokedex-25-26" "'${DESA_CURRENT}'"
+  echo "Current -> $(readlink -f "'${DESA_CURRENT}'")" | tee -a "'${DESA_BASE}'/logs/desa-'${BUILD_NUMBER}'.log"
 '
 
-# Matar proceso antiguo en 3000 (si lo hubiera, sea del usuario que sea)
+# Matar proceso antiguo en 3000 (da igual el usuario)
 PIDS_ON_PORT="$(sudo lsof -ti tcp:${DESA_PORT} || true)"
 if [ -n "$PIDS_ON_PORT" ]; then
   echo "Matando proceso(s) en puerto ${DESA_PORT}: $PIDS_ON_PORT"
@@ -116,7 +119,7 @@ if [ -n "$PIDS_ON_PORT" ]; then
   sleep 1
 fi
 
-# Arrancar DESA como azureuser (NO persistente)
+# Arrancar DESA como azureuser (NO persistente) desde el symlink 'current'
 sudo -H -u azureuser bash -lc '
   set -e
   cd "'${DESA_CURRENT}'"
@@ -126,7 +129,7 @@ sudo -H -u azureuser bash -lc '
   echo "PID DESA: $(cat "'${DESA_PID_FILE}'")"
 '
 
-# Limpiar releases antiguas (mantener últimas 5)
+# Mantener últimas 5 releases
 cd "${DESA_RELEASES}"
 ls -1t | tail -n +6 | xargs -r rm -rf || true
 
@@ -177,19 +180,22 @@ echo ">> Creando release ${RELEASE_NAME} en ${BUILD_DIR}"
 sudo mkdir -p "${PROD_RELEASES}" "${PROD_BASE}/logs"
 sudo chown -R azureuser:azureuser "${PROD_BASE}"
 
-# Clonar y build como azureuser
+# Clonar + build + symlink como azureuser
 sudo -H -u azureuser bash -lc '
   set -e
   rm -rf "'${BUILD_DIR}'"
   mkdir -p "'${BUILD_DIR}'"
   git clone --depth 1 https://github.com/paula-sda/next-js-pokedex-25-26.git "'${BUILD_DIR}'/next-js-pokedex-25-26"
   cd "'${BUILD_DIR}'/next-js-pokedex-25-26"
+  COMMIT=$(git rev-parse --short HEAD)
+  echo "Commit PROD: ${COMMIT}" | tee -a "'${PROD_BASE}'/logs/prod-'${BUILD_NUMBER}'.log"
   npm ci
   npm run build
   ln -sfn "'${BUILD_DIR}'/next-js-pokedex-25-26" "'${PROD_CURRENT}'"
+  echo "Current -> $(readlink -f "'${PROD_CURRENT}'")" | tee -a "'${PROD_BASE}'/logs/prod-'${BUILD_NUMBER}'.log"
 '
 
-# Arrancar o recargar con PM2 como azureuser (escuchando en 0.0.0.0)
+# Arrancar/recargar con PM2 como azureuser (escuchando en 0.0.0.0)
 sudo -H -u azureuser bash -lc '
   set -e
   cd "'${PROD_CURRENT}'"
@@ -204,7 +210,7 @@ sudo -H -u azureuser bash -lc '
   pm2 save
 '
 
-# Limpiar releases antiguas (mantener últimas 5)
+# Mantener últimas 5 releases
 cd "${PROD_RELEASES}"
 ls -1t | tail -n +6 | xargs -r rm -rf || true
 
@@ -234,19 +240,20 @@ echo "PROD accesible"
     }
 
     post {
-        // Matar DESA SIEMPRE (éxito o fallo)
+        // Matar DESA SIEMPRE (éxito o fallo) sin romper el pipeline si no hay permisos/archivos
         always {
             sh '''
+# Si hay PID, intentar matarlo y borrar el archivo con sudo (para evitar "Permission denied")
 if [ -f "${DESA_PID_FILE}" ]; then
     echo "Parando DESA por PID..."
-    sudo kill -9 $(cat "${DESA_PID_FILE}") || true
-    rm -f "${DESA_PID_FILE}"
+    sudo kill -9 $(cat "${DESA_PID_FILE}") 2>/dev/null || true
+    sudo rm -f "${DESA_PID_FILE}" 2>/dev/null || true
 fi
 
 # Por seguridad, matar cualquier proceso escuchando en 3000
 if sudo lsof -ti tcp:${DESA_PORT} > /dev/null; then
     echo "Queda algo en ${DESA_PORT}, forzando kill..."
-    sudo kill -9 $(sudo lsof -ti tcp:${DESA_PORT}) || true
+    sudo kill -9 $(sudo lsof -ti tcp:${DESA_PORT}) 2>/dev/null || true
 fi
 
 echo "DESA detenido al finalizar pipeline"
