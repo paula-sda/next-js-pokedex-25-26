@@ -221,9 +221,63 @@ echo "PROD accesible: http://172.174.241.22:${PROD_PORT}"
     post {
         success {
             echo "✅ PIPELINE COMPLETADO"
+
+            script {
+                def result   = currentBuild.currentResult ?: 'SUCCESS'
+                def buildUrl = env.BUILD_URL ?: 'N/A'
+                def prodUrl  = 'http://172.174.241.22:4200/'
+                def subject  = "Resultado del pipeline: ${result}"
+                def bodyText = """Hola Paula!
+
+El pipeline ha terminado correctamente (SUCCESS).
+
+URL de Producción: ${prodUrl}
+Logs del build: ${buildUrl}
+
+Un saludo!"""
+
+                sh """
+                  curl --location --request POST "https://sandbox.api.mailtrap.io/api/send/4287365" \
+                    --header "Authorization: Bearer 9dd7a1618dfdda23f6d05d23996f2eb2" \
+                    --header "Content-Type: application/json" \
+                    --data-raw '{
+                      "from": {"email": "jenkins@example.com", "name": "Jenkins Pipeline"},
+                      "to": [{"email": "paula_saenz@euneiz.com"}],
+                      "subject": "${subject}",
+                      "text": "${bodyText}",
+                      "category": "CI Test"
+                    }'
+                """
+            }
         }
+
         failure {
             echo "❌ El pipeline ha fallado. Revisa los logs de los stages que fallaron."
+
+            script {
+                def result   = currentBuild.currentResult ?: 'FAILURE'
+                def buildUrl = env.BUILD_URL ?: 'N/A'
+                def subject  = "Resultado del pipeline: ${result}"
+                def bodyText = """Hola Paula!
+
+El pipeline ha terminado con estado: ${result}.
+Revisa los logs del build: ${buildUrl}
+
+Un saludo!"""
+
+                sh """
+                  curl --location --request POST "https://sandbox.api.mailtrap.io/api/send/4287365" \
+                    --header "Authorization: Bearer 9dd7a1618dfdda23f6d05d23996f2eb2" \
+                    --header "Content-Type: application/json" \
+                    --data-raw '{
+                      "from": {"email": "jenkins@example.com", "name": "Jenkins Pipeline"},
+                      "to": [{"email": "paula_saenz@euneiz.com"}],
+                      "subject": "${subject}",
+                      "text": "${bodyText}",
+                      "category": "CI Test"
+                    }'
+                """
+            }
         }
-    }
-}
+    } 
+} 
