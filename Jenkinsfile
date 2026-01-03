@@ -242,31 +242,32 @@ echo "PROD accesible: http://172.174.241.22:${PROD_PORT}"
     }
 
     post {
-    success {
-        echo "✅ PIPELINE COMPLETADO CORRECTAMENTE"
-        emailext(
-            subject: "SUCCESS - Jenkins ${JOB_NAME} #${BUILD_NUMBER}",
-            body: """
-                ✅ Pipeline terminado correctamente<br>
-                Job: ${JOB_NAME}<br>
-                Build: #${BUILD_NUMBER}<br>
-                <a href="${BUILD_URL}">Ver detalles</a>
-            """,
-            to: "paula_saenz@euneiz.com"
-        )
-    }
+        success {
+            echo "✅ PIPELINE COMPLETADO CORRECTAMENTE"
+            emailext(
+                subject: "SUCCESS - Jenkins ${JOB_NAME} #${BUILD_NUMBER}",
+                body: """
+                    ✅ Pipeline terminado correctamente<br>
+                    Job: ${JOB_NAME}<br>
+                    Build: #${BUILD_NUMBER}<br>
+                    <a href="${BUILD_URL}">Ver detalles</a>
+                """,
+                to: "paula_saenz@euneiz.com"
+            )
+        }
 
-    failure {
-        echo "❌ PIPELINE HA FALLADO"
-        emailext(
-            subject: "FAILURE - Jenkins ${JOB_NAME} #${BUILD_NUMBER}",
-            body: """
-                ❌ Pipeline falló<br>
-                Job: ${JOB_NAME}<br>
-                Build: #${BUILD_NUMBER}<br>
-                <a href="${BUILD_URL}">Ver logs</a>
-            """,
-            to: "paula_saenz@euneiz.com"
-        )
+        failure {
+            echo "❌ PIPELINE HA FALLADO"
+            emailext(
+                subject: "FAILURE - Jenkins ${JOB_NAME} #${BUILD_NUMBER}",
+                body: """
+                    ❌ Pipeline falló<br>
+                    Job: ${JOB_NAME}<br>
+                    Build: #${BUILD_NUMBER}<br>
+                    <a href="${BUILD_URL}">Ver logs</a>
+                """,
+                to: "paula_saenz@euneiz.com"
+            )
+        }
     }
-}
+} 
