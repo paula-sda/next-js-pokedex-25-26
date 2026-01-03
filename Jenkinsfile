@@ -15,6 +15,7 @@ pipeline {
         DESA_BASE      = '/opt/desa'
         DESA_RELEASES  = '/opt/desa/releases'
         DESA_CURRENT   = '/opt/desa/current'
+        DESA_PID_FILE  = '/opt/desa/desa.pid'   // <-- añadido (lo usas en post)
 
         // PROD
         PROD_PORT      = '5000'
@@ -82,7 +83,7 @@ pipeline {
         }
 
         // =========================
-        // DESA AUTOCREADO 
+        // DESA AUTOCREADO (NO persiste)
         // =========================
         stage('Deploy DESA') {
             steps {
@@ -94,42 +95,44 @@ BUILD_DIR="${DESA_RELEASES}/${RELEASE_NAME}"
 
 echo ">> Creando release ${RELEASE_NAME} en ${BUILD_DIR}"
 
-sudo mkdir -p "${DESA_RELEASES}"
-sudo mkdir -p "${DESA_BASE}/logs"
-sudo chown -R $USER:$USER "${DESA_BASE}"
+# Preparar estructura y permisos para azureuser
+sudo mkdir -p "${DESA_RELEASES}" "${DESA_BASE}/logs"
+sudo chown -R azureuser:azureuser "${DESA_BASE}"
 
-rm -rf "${BUILD_DIR}"
-mkdir -p "${BUILD_DIR}"
+# Clonar + build + symlink como azureuser
+sudo -H -u azureuser bash -lc '
+  set -e
+  rm -rf "'${BUILD_DIR}'"
+  mkdir -p "'${BUILD_DIR}'"
+  git clone --depth 1 https://github.com/paula-sda/next-js-pokedex-25-26.git "'${BUILD_DIR}'/next-js-pokedex-25-26"
+  cd "'${BUILD_DIR}'/next-js-pokedex-25-26"
+  npm ci
+  npm run build
+  ln -sfn "'${BUILD_DIR}'/next-js-pokedex-25-26" "'${DESA_CURRENT}'"
+  echo "Current -> $(readlink -f "'${DESA_CURRENT}'")" | tee -a "'${DESA_BASE}'/logs/desa-'${BUILD_NUMBER}'.log"
+'
 
-git clone --depth 1 https://github.com/paula-sda/next-js-pokedex-25-26.git "${BUILD_DIR}/next-js-pokedex-25-26"
-
-cd "${BUILD_DIR}/next-js-pokedex-25-26"
-npm ci
-npm run build
-
-# Actualizar symlink a la nueva release
-ln -sfn "${BUILD_DIR}/next-js-pokedex-25-26" "${DESA_CURRENT}"
-
-# Parar proceso antiguo por puerto
-PIDS_ON_PORT="$(lsof -ti tcp:${DESA_PORT} || true)"
+# Parar proceso antiguo por puerto (sea del usuario que sea)
+PIDS_ON_PORT="$(sudo lsof -ti tcp:${DESA_PORT} || true)"
 if [ -n "$PIDS_ON_PORT" ]; then
   echo "Matando proceso(s) en puerto ${DESA_PORT}: $PIDS_ON_PORT"
-  kill -9 $PIDS_ON_PORT || true
+  sudo kill -9 $PIDS_ON_PORT || true
   sleep 1
 fi
+# Kill adicional por patrón (por si algo queda colgado)
+sudo pkill -f "next.*-p ${DESA_PORT}" || true
 
-cd "${DESA_CURRENT}"
-echo "Current -> $(readlink -f "${DESA_CURRENT}")" | tee -a "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log"
+# Arrancar DESA como azureuser (NO persistente)
+sudo -H -u azureuser bash -lc '
+  set -e
+  cd "'${DESA_CURRENT}'"
+  export NODE_ENV=production
+  nohup npx next start -H 0.0.0.0 -p "'${DESA_PORT}'" > "'${DESA_BASE}'/logs/desa-'${BUILD_NUMBER}'.log" 2>&1 < /dev/null &
+  echo $! > "'${DESA_PID_FILE}'"
+  echo "PID nuevo DESA: $(cat "'${DESA_PID_FILE}'")" | tee -a "'${DESA_BASE}'/logs/desa-'${BUILD_NUMBER}'.log"
+'
 
-export BUILD_ID=dontKillMe
-export NODE_ENV=production
-
-# Arrancar  
-nohup npx next start -H 0.0.0.0 -p "${DESA_PORT}" > "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log" 2>&1 < /dev/null &
-
-echo $! > "${DESA_BASE}/desa.pid"
-echo "PID nuevo DESA: $(cat "${DESA_BASE}/desa.pid")" | tee -a "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log"
-
+# Limpiar releases antiguas (mantener últimas 5)
 cd "${DESA_RELEASES}"
 ls -1t | tail -n +6 | xargs -r rm -rf || true
 
@@ -142,8 +145,11 @@ echo ">> DESA desplegado: ${RELEASE_NAME} -> http://172.174.241.22:${DESA_PORT}"
             steps {
                 sh '''
 echo "Esperando a que la aplicación de DESA se inicie..."
-for i in {1..20}; do
-    curl -s "http://172.174.241.22:${DESA_PORT}" > /dev/null && break
+for i in $(seq 1 30); do
+    if curl -s "http://172.174.241.22:${DESA_PORT}" > /dev/null; then
+        echo "DESA responde en intento $i"
+        break
+    fi
     echo "Intento $i: la aplicación aún no responde, esperando 3s..."
     sleep 3
 done
@@ -160,7 +166,9 @@ echo "DESA accesible: http://172.174.241.22:${DESA_PORT}"
             }
         }
 
-
+        // =========================
+        // PROD AUTOCREADO (persistente con PM2 y cwd correcto)
+        // =========================
         stage('Deploy PRODUCCION') {
             steps {
                 sh '''
@@ -190,19 +198,16 @@ sudo -H -u azureuser bash -lc '
   echo "Current -> $(readlink -f "'${PROD_CURRENT}'")" | tee -a "'${PROD_BASE}'/logs/prod-'${BUILD_NUMBER}'.log"
 '
 
-# Arrancar/recargar con PM2 como azureuser (escuchando en 0.0.0.0)
+# Arrancar SIEMPRE desde el symlink 'current' con cwd correcto (evita cwd antiguo)
 sudo -H -u azureuser bash -lc '
   set -e
   cd "'${PROD_CURRENT}'"
   export NODE_ENV=production
-  if pm2 list | grep -q "nextjs-prod"; then
-      echo "Recargando app existente con pm2..."
-      pm2 reload nextjs-prod --update-env
-  else
-      echo "Arrancando app por primera vez con pm2..."
-      pm2 start node_modules/.bin/next --name nextjs-prod -- start -H 0.0.0.0 -p "'${PROD_PORT}'"
-  fi
+  pm2 delete nextjs-prod || true
+  pm2 start node_modules/.bin/next --name nextjs-prod -- start -H 0.0.0.0 -p "'${PROD_PORT}'" --cwd "'${PROD_CURRENT}'"
   pm2 save
+  echo -n "PM2 cwd actual: "
+  pm2 describe nextjs-prod | sed -n "s/.*pm2_env.cwd.: //p"
 '
 
 # Mantener últimas 5 releases
@@ -245,7 +250,7 @@ if [ -f "${DESA_PID_FILE}" ]; then
     sudo rm -f "${DESA_PID_FILE}" 2>/dev/null || true
 fi
 
-# Por seguridad, matar cualquier proceso escuchando en 3000
+# Por seguridad, matar cualquier proceso escuchando en el puerto de DESA
 if sudo lsof -ti tcp:${DESA_PORT} > /dev/null; then
     echo "Queda algo en ${DESA_PORT}, forzando kill..."
     sudo kill -9 $(sudo lsof -ti tcp:${DESA_PORT}) 2>/dev/null || true
