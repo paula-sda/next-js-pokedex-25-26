@@ -162,9 +162,9 @@ echo "DESA accesible: http://172.174.241.22:${DESA_PORT}"
         // =========================
         // PROD AUTOCREADO 
         // =========================
-        stage('Deploy PRODUCCION') {
-            steps {
-                sh '''
+     stage('Deploy PRODUCCION') {
+    steps {
+        sh '''
 set -e
 
 RELEASE_NAME="PROD-${BUILD_NUMBER}"
@@ -172,51 +172,44 @@ BUILD_DIR="${PROD_RELEASES}/${RELEASE_NAME}"
 
 echo ">> Creando release ${RELEASE_NAME} en ${BUILD_DIR}"
 
-sudo mkdir -p "${PROD_RELEASES}"
-sudo mkdir -p "${PROD_BASE}/logs"
-sudo chown -R $USER:$USER "${PROD_BASE}"
-
+# Crear carpeta del release
 rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
 
+# Clonar repo y hacer build
 git clone --depth 1 https://github.com/paula-sda/next-js-pokedex-25-26.git "${BUILD_DIR}/next-js-pokedex-25-26"
-
 cd "${BUILD_DIR}/next-js-pokedex-25-26"
 npm ci
 npm run build
 
-# Actualizar symlink a la nueva release
+# Actualizar symlink 'current'
 ln -sfn "${BUILD_DIR}/next-js-pokedex-25-26" "${PROD_CURRENT}"
-
-# Parar proceso antiguo por puerto
-PIDS_ON_PORT="$(lsof -ti tcp:${PROD_PORT} || true)"
-if [ -n "$PIDS_ON_PORT" ]; then
-  echo "Matando proceso(s) en puerto ${PROD_PORT}: $PIDS_ON_PORT"
-  kill -9 $PIDS_ON_PORT || true
-  sleep 1
-fi
-
-# Entrar al nuevo "current" (apunta a la nueva release)
 cd "${PROD_CURRENT}"
-echo "Current -> $(readlink -f "${PROD_CURRENT}")" | tee -a "${PROD_BASE}/logs/prod-${BUILD_NUMBER}.log"
 
-export BUILD_ID=dontKillMe
+# Configurar entorno
 export NODE_ENV=production
 
-# Arrancar en background de forma robusta
-nohup npx next start -H 0.0.0.0 -p "${PROD_PORT}" > "${PROD_BASE}/logs/prod-${BUILD_NUMBER}.log" 2>&1 < /dev/null &
+# Arrancar o recargar con pm2
+if pm2 list | grep -q "nextjs-prod"; then
+    echo "Recargando app existente con pm2..."
+    pm2 reload nextjs-prod --update-env
+else
+    echo "Arrancando app por primera vez con pm2..."
+    pm2 start node_modules/next/dist/bin/next --name nextjs-prod -- start -p "${PROD_PORT}" --update-env
+fi
 
-echo $! > "${PROD_BASE}/prod.pid"
-echo "PID nuevo PROD: $(cat "${PROD_BASE}/prod.pid")" | tee -a "${PROD_BASE}/logs/prod-${BUILD_NUMBER}.log"
+# Guardar la configuración para que sobreviva reinicios
+pm2 save
 
-# Limpiar releases antiguas (deja las 5 últimas)
+# Limpiar releases antiguas (mantener solo últimas 5)
 cd "${PROD_RELEASES}"
 ls -1t | tail -n +6 | xargs -r rm -rf || true
 
 echo ">> PROD desplegado: ${RELEASE_NAME} -> http://172.174.241.22:${PROD_PORT}"
 '''
-            }
-        }
+    }
+}
+
 
         stage('Test PRODUCCION') {
             steps {
@@ -243,31 +236,10 @@ echo "PROD accesible: http://172.174.241.22:${PROD_PORT}"
 
     post {
         success {
-            echo "✅ PIPELINE COMPLETADO CORRECTAMENTE"
-            emailext(
-                subject: "SUCCESS - Jenkins ${JOB_NAME} #${BUILD_NUMBER}",
-                body: """
-                    ✅ Pipeline terminado correctamente<br>
-                    Job: ${JOB_NAME}<br>
-                    Build: #${BUILD_NUMBER}<br>
-                    <a href="${BUILD_URL}">Ver detalles</a>
-                """,
-                to: "paula_saenz@euneiz.com"
-            )
+            echo "✅ PIPELINE COMPLETADO: DESA y PROD OK"
         }
-
         failure {
-            echo "❌ PIPELINE HA FALLADO"
-            emailext(
-                subject: "FAILURE - Jenkins ${JOB_NAME} #${BUILD_NUMBER}",
-                body: """
-                    ❌ Pipeline falló<br>
-                    Job: ${JOB_NAME}<br>
-                    Build: #${BUILD_NUMBER}<br>
-                    <a href="${BUILD_URL}">Ver logs</a>
-                """,
-                to: "paula_saenz@euneiz.com"
-            )
+            echo "❌ El pipeline ha fallado. Revisa los logs de los stages que fallaron."
         }
     }
-} 
+}
