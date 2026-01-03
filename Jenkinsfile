@@ -216,24 +216,23 @@ echo "PROD accesible: http://172.174.241.22:${PROD_PORT}"
 '''
             }
         }
-    } 
+    }
 
-    
-post {
-  success {
-    echo "✅ PIPELINE COMPLETADO"
+    post {
+        success {
+            echo "✅ PIPELINE COMPLETADO"
 
-    script {
-      def prodUrl  = 'http://172.174.241.22:4200/'
-      def buildUrl = env.BUILD_URL ?: 'N/A'
-      def inboxId  = '4287365' // tu Sandbox ID
-      def token    = '9dd7a1618dfdda23f6d05d23996f2eb2' 
+            script {
+                def prodUrl  = 'http://172.174.241.22:4200/'
+                def buildUrl = env.BUILD_URL ?: 'N/A'
+                def inboxId  = '4287365' // tu Sandbox ID
+                def token    = '9dd7a1618dfdda23f6d05d23996f2eb2' 
 
-      sh """
-        curl -sS --location --request POST "https://sandbox.api.mailtrap.io/api/send/${inboxId}" \\
-          --header "Authorization: Bearer ${token}" \\
-          --header "Content-Type: application/json" \\
-          --data @- <<'JSON'
+                sh """
+                curl -sS --location --request POST "https://sandbox.api.mailtrap.io/api/send/${inboxId}" \\
+                  --header "Authorization: Bearer ${token}" \\
+                  --header "Content-Type: application/json" \\
+                  --data @- <<'JSON'
 {
   "from": { "email": "jenkins@example.com", "name": "Jenkins Pipeline" },
   "to": [ { "email": "paula_saenz@euneiz.com" } ],
@@ -242,23 +241,23 @@ post {
   "category": "CI Test"
 }
 JSON
-      """
-    }
-  }
+                """
+            }
+        }
 
-  failure {
-    echo "❌ El pipeline ha fallado. Revisa los logs de los stages que fallaron."
+        failure {
+            echo "❌ El pipeline ha fallado. Revisa los logs de los stages que fallaron."
 
-    script {
-      def buildUrl = env.BUILD_URL ?: 'N/A'
-      def inboxId  = '4287365'
-      def token    = '9dd7a1618dfdda23f6d05d23996f2eb2' // ⚠️ rota este token tras probar
+            script {
+                def buildUrl = env.BUILD_URL ?: 'N/A'
+                def inboxId  = '4287365'
+                def token    = '9dd7a1618dfdda23f6d05d23996f2eb2' 
 
-      sh """
-        curl -sS --location --request POST "https://sandbox.api.mailtrap.io/api/send/${inboxId}" \\
-          --header "Authorization: Bearer ${token}" \\
-          --header "Content-Type: application/json" \\
-          --data @- <<'JSON'
+                sh """
+                curl -sS --location --request POST "https://sandbox.api.mailtrap.io/api/send/${inboxId}" \\
+                  --header "Authorization: Bearer ${token}" \\
+                  --header "Content-Type: application/json" \\
+                  --data @- <<'JSON'
 {
   "from": { "email": "jenkins@example.com", "name": "Jenkins Pipeline" },
   "to": [ { "email": "paula_saenz@euneiz.com" } ],
@@ -267,8 +266,8 @@ JSON
   "category": "CI Test"
 }
 JSON
-      """
+                """
+            }
+        }
     }
-  }
 }
-
