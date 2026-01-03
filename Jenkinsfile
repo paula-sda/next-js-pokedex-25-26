@@ -8,13 +8,14 @@ pipeline {
     environment {
         SONAR_TOKEN = credentials('SONAR_TOKEN')
 
-        // ===== Variables DESA =====
+        // ===== Variables para entorno autocreado =====
+        // DESA
         DESA_PORT      = '3000'
         DESA_BASE      = '/opt/desa'
         DESA_RELEASES  = '/opt/desa/releases'
         DESA_CURRENT   = '/opt/desa/current'
 
-        // ===== Variables PROD =====
+        // PROD
         PROD_PORT      = '5000'
         PROD_BASE      = '/opt/produccion'
         PROD_RELEASES  = '/opt/produccion/releases'
@@ -80,7 +81,7 @@ pipeline {
         }
 
         // =========================
-        // DESA AUTOCREADO (sin PM2)
+        // DESA AUTOCREADO 
         // =========================
         stage('Deploy DESA') {
             steps {
@@ -92,35 +93,42 @@ BUILD_DIR="${DESA_RELEASES}/${RELEASE_NAME}"
 
 echo ">> Creando release ${RELEASE_NAME} en ${BUILD_DIR}"
 
-sudo mkdir -p "${DESA_RELEASES}" "${DESA_BASE}/logs"
+sudo mkdir -p "${DESA_RELEASES}"
+sudo mkdir -p "${DESA_BASE}/logs"
 sudo chown -R $USER:$USER "${DESA_BASE}"
 
 rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
 
 git clone --depth 1 https://github.com/paula-sda/next-js-pokedex-25-26.git "${BUILD_DIR}/next-js-pokedex-25-26"
+
 cd "${BUILD_DIR}/next-js-pokedex-25-26"
 npm ci
 npm run build
 
+# Actualizar symlink a la nueva release
 ln -sfn "${BUILD_DIR}/next-js-pokedex-25-26" "${DESA_CURRENT}"
 
-# Parar cualquier proceso viejo que use el puerto
+# Parar proceso antiguo por puerto
 PIDS_ON_PORT="$(lsof -ti tcp:${DESA_PORT} || true)"
 if [ -n "$PIDS_ON_PORT" ]; then
-    echo "Matando proceso(s) en puerto ${DESA_PORT}: $PIDS_ON_PORT"
-    kill -9 $PIDS_ON_PORT || true
-    sleep 1
+  echo "Matando proceso(s) en puerto ${DESA_PORT}: $PIDS_ON_PORT"
+  kill -9 $PIDS_ON_PORT || true
+  sleep 1
 fi
 
 cd "${DESA_CURRENT}"
+echo "Current -> $(readlink -f "${DESA_CURRENT}")" | tee -a "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log"
+
 export BUILD_ID=dontKillMe
 export NODE_ENV=production
 
+# Arrancar  
 nohup npx next start -H 0.0.0.0 -p "${DESA_PORT}" > "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log" 2>&1 < /dev/null &
-echo $! > "${DESA_BASE}/desa.pid"
 
-# Limpiar releases antiguas (mantener últimas 5)
+echo $! > "${DESA_BASE}/desa.pid"
+echo "PID nuevo DESA: $(cat "${DESA_BASE}/desa.pid")" | tee -a "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log"
+
 cd "${DESA_RELEASES}"
 ls -1t | tail -n +6 | xargs -r rm -rf || true
 
@@ -133,13 +141,8 @@ echo ">> DESA desplegado: ${RELEASE_NAME} -> http://172.174.241.22:${DESA_PORT}"
             steps {
                 sh '''
 echo "Esperando a que la aplicación de DESA se inicie..."
-i=0
-while [ $i -lt 20 ]; do
-    if curl -s "http://172.174.241.22:${DESA_PORT}" > /dev/null; then
-        echo "DESA responde en intento $((i+1))"
-        break
-    fi
-    i=$((i+1))
+for i in {1..20}; do
+    curl -s "http://172.174.241.22:${DESA_PORT}" > /dev/null && break
     echo "Intento $i: la aplicación aún no responde, esperando 3s..."
     sleep 3
 done
@@ -155,6 +158,7 @@ echo "DESA accesible: http://172.174.241.22:${DESA_PORT}"
                 input message: 'DESA OK. ¿Deseas pasar a PRODUCCIÓN?'
             }
         }
+
 
         // =========================
         // PROD AUTOCREADO (con PM2)
