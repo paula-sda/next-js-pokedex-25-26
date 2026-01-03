@@ -218,66 +218,57 @@ echo "PROD accesible: http://172.174.241.22:${PROD_PORT}"
         }
     } 
 
-    post {
-        success {
-            echo "✅ PIPELINE COMPLETADO"
+    
+post {
+  success {
+    echo "✅ PIPELINE COMPLETADO"
 
-            script {
-                def result   = currentBuild.currentResult ?: 'SUCCESS'
-                def buildUrl = env.BUILD_URL ?: 'N/A'
-                def prodUrl  = 'http://172.174.241.22:4200/'
-                def subject  = "Resultado del pipeline: ${result}"
-                def bodyText = """Hola Paula!
+    script {
+      def prodUrl  = 'http://172.174.241.22:4200/'
+      def buildUrl = env.BUILD_URL ?: 'N/A'
+      def inboxId  = '4287365' // tu Sandbox ID
+      def token    = '9dd7a1618dfdda23f6d05d23996f2eb2' 
 
-El pipeline ha terminado correctamente (SUCCESS).
+      sh """
+        curl -sS --location --request POST "https://sandbox.api.mailtrap.io/api/send/${inboxId}" \\
+          --header "Authorization: Bearer ${token}" \\
+          --header "Content-Type: application/json" \\
+          --data @- <<'JSON'
+{
+  "from": { "email": "jenkins@example.com", "name": "Jenkins Pipeline" },
+  "to": [ { "email": "paula_saenz@euneiz.com" } ],
+  "subject": "Resultado del pipeline: SUCCESS",
+  "text": "Hola Paula!\\n\\nEl pipeline ha terminado correctamente (SUCCESS).\\n\\nURL de Producción: ${prodUrl}\\nLogs del build: ${buildUrl}\\n\\nUn saludo!",
+  "category": "CI Test"
+}
+JSON
+      """
+    }
+  }
 
-URL de Producción: ${prodUrl}
-Logs del build: ${buildUrl}
+  failure {
+    echo "❌ El pipeline ha fallado. Revisa los logs de los stages que fallaron."
 
-Un saludo!"""
+    script {
+      def buildUrl = env.BUILD_URL ?: 'N/A'
+      def inboxId  = '4287365'
+      def token    = '9dd7a1618dfdda23f6d05d23996f2eb2' // ⚠️ rota este token tras probar
 
-                sh """
-                  curl --location --request POST "https://sandbox.api.mailtrap.io/api/send/4287365" \
-                    --header "Authorization: Bearer 9dd7a1618dfdda23f6d05d23996f2eb2" \
-                    --header "Content-Type: application/json" \
-                    --data-raw '{
-                      "from": {"email": "jenkins@example.com", "name": "Jenkins Pipeline"},
-                      "to": [{"email": "paula_saenz@euneiz.com"}],
-                      "subject": "${subject}",
-                      "text": "${bodyText}",
-                      "category": "CI Test"
-                    }'
-                """
-            }
-        }
+      sh """
+        curl -sS --location --request POST "https://sandbox.api.mailtrap.io/api/send/${inboxId}" \\
+          --header "Authorization: Bearer ${token}" \\
+          --header "Content-Type: application/json" \\
+          --data @- <<'JSON'
+{
+  "from": { "email": "jenkins@example.com", "name": "Jenkins Pipeline" },
+  "to": [ { "email": "paula_saenz@euneiz.com" } ],
+  "subject": "Resultado del pipeline: FAILURE",
+  "text": "Hola Paula!\\n\\nEl pipeline ha terminado con estado: FAILURE.\\nRevisa los logs del build: ${buildUrl}\\n\\nUn saludo!",
+  "category": "CI Test"
+}
+JSON
+      """
+    }
+  }
+}
 
-        failure {
-            echo "❌ El pipeline ha fallado. Revisa los logs de los stages que fallaron."
-
-            script {
-                def result   = currentBuild.currentResult ?: 'FAILURE'
-                def buildUrl = env.BUILD_URL ?: 'N/A'
-                def subject  = "Resultado del pipeline: ${result}"
-                def bodyText = """Hola Paula!
-
-El pipeline ha terminado con estado: ${result}.
-Revisa los logs del build: ${buildUrl}
-
-Un saludo!"""
-
-                sh """
-                  curl --location --request POST "https://sandbox.api.mailtrap.io/api/send/4287365" \
-                    --header "Authorization: Bearer 9dd7a1618dfdda23f6d05d23996f2eb2" \
-                    --header "Content-Type: application/json" \
-                    --data-raw '{
-                      "from": {"email": "jenkins@example.com", "name": "Jenkins Pipeline"},
-                      "to": [{"email": "paula_saenz@euneiz.com"}],
-                      "subject": "${subject}",
-                      "text": "${bodyText}",
-                      "category": "CI Test"
-                    }'
-                """
-            }
-        }
-    } 
-} 
