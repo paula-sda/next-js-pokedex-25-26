@@ -80,7 +80,7 @@ pipeline {
         }
 
         // =========================
-        // DESA AUTOCREADO
+        // DESA AUTOCREADO (sin PM2)
         // =========================
         stage('Deploy DESA') {
             steps {
@@ -105,12 +105,12 @@ npm run build
 
 ln -sfn "${BUILD_DIR}/next-js-pokedex-25-26" "${DESA_CURRENT}"
 
-# Parar proceso antiguo
+# Parar cualquier proceso viejo que use el puerto
 PIDS_ON_PORT="$(lsof -ti tcp:${DESA_PORT} || true)"
 if [ -n "$PIDS_ON_PORT" ]; then
-  echo "Matando proceso(s) en puerto ${DESA_PORT}: $PIDS_ON_PORT"
-  kill -9 $PIDS_ON_PORT || true
-  sleep 1
+    echo "Matando proceso(s) en puerto ${DESA_PORT}: $PIDS_ON_PORT"
+    kill -9 $PIDS_ON_PORT || true
+    sleep 1
 fi
 
 cd "${DESA_CURRENT}"
@@ -118,10 +118,9 @@ export BUILD_ID=dontKillMe
 export NODE_ENV=production
 
 nohup npx next start -H 0.0.0.0 -p "${DESA_PORT}" > "${DESA_BASE}/logs/desa-${BUILD_NUMBER}.log" 2>&1 < /dev/null &
-
 echo $! > "${DESA_BASE}/desa.pid"
 
-# Limpiar releases antiguas
+# Limpiar releases antiguas (mantener últimas 5)
 cd "${DESA_RELEASES}"
 ls -1t | tail -n +6 | xargs -r rm -rf || true
 
@@ -158,7 +157,7 @@ echo "DESA accesible: http://172.174.241.22:${DESA_PORT}"
         }
 
         // =========================
-        // PROD AUTOCREADO
+        // PROD AUTOCREADO (con PM2)
         // =========================
         stage('Deploy PRODUCCION') {
             steps {
@@ -182,9 +181,9 @@ ln -sfn "${BUILD_DIR}/next-js-pokedex-25-26" "${PROD_CURRENT}"
 cd "${PROD_CURRENT}"
 
 export NODE_ENV=production
-export PATH="$HOME/.npm-global/bin:$HOME/.nvm/versions/node/$(node -v)/bin:/usr/bin:/usr/local/bin:$PATH"
+export PATH="$HOME/.npm-global/bin:/usr/bin:/usr/local/bin:$PATH"
 
-# Arrancar o recargar con PM2 correctamente
+# Arrancar o recargar con PM2
 if pm2 list | grep -q "nextjs-prod"; then
     echo "Recargando app existente con pm2..."
     pm2 reload nextjs-prod --update-env
@@ -193,10 +192,9 @@ else
     pm2 start node_modules/.bin/next --name nextjs-prod -- start -H 0.0.0.0 -p "${PROD_PORT}"
 fi
 
-# Guardar lista para autoarranque al reiniciar
 pm2 save
 
-# Limpiar releases antiguas
+# Limpiar releases antiguas (mantener últimas 5)
 cd "${PROD_RELEASES}"
 ls -1t | tail -n +6 | xargs -r rm -rf || true
 
