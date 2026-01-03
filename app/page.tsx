@@ -11,7 +11,8 @@ export default async function Home({ searchParams }: PokemonListPageProps) {
   const pokemonData = await getPokemonList(currentPage);
   const pokemonList = pokemonData?.results || [];
 
-  const totalPokemon = pokemonData?.count || 0;
+  const MAX_POKEMON = 50;
+  const totalPokemon = Math.min(pokemonData?.count || 0, MAX_POKEMON);
   const totalPages = Math.ceil(totalPokemon / pokemonPerPage);
 
   return (
